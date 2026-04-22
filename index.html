@@ -1,0 +1,2394 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aktivite Simülatörü v3 — Sensör İzleme</title>
+<style>
+:root {
+  --bg:#f0f2f5;--surface:#fff;--surface2:#f7f7fb;
+  --border:#eee;--text:#222;--text2:#666;--text3:#aaa;
+  --accent:#534AB7;--accent2:#3C3489;--green:#1d9e75;
+  --red:#e24b4a;--amber:#ef9f27;--blue:#378add;--pink:#e260a0;
+  --shadow:0 1px 4px rgba(0,0,0,0.06);
+}
+[data-theme="dark"]{
+  --bg:#13141a;--surface:#1e1f28;--surface2:#252633;
+  --border:#2e2f3e;--text:#e8e8f0;--text2:#9090a8;--text3:#555568;
+  --accent:#7F77DD;--accent2:#AFA9EC;--green:#2db88a;
+  --red:#e24b4a;--amber:#ef9f27;--blue:#85b7eb;--pink:#e260a0;
+  --shadow:0 1px 4px rgba(0,0,0,0.3);
+}
+*{box-sizing:border-box;margin:0;padding:0;transition:background .2s,color .2s,border-color .2s;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
+
+/* HEADER */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:.5rem 1.2rem;
+  display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.logo{font-size:15px;font-weight:800;color:var(--accent);display:flex;align-items:center;gap:6px;}
+.header-right{display:flex;align-items:center;gap:8px;}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.4s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.hbtn{background:none;border:1px solid var(--border);border-radius:6px;
+  padding:4px 9px;cursor:pointer;font-size:11px;color:var(--text2);}
+.hbtn:hover{background:var(--surface2);}
+.lang-btn{padding:3px 8px;border-radius:5px;border:1px solid var(--border);
+  font-size:11px;font-weight:600;cursor:pointer;background:none;color:var(--text2);}
+.lang-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+#weather-badge{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px;padding:3px 8px;
+  border:1px solid var(--border);border-radius:6px;background:var(--surface2);}
+
+/* CONTAINER */
+.container{max-width:1300px;margin:0 auto;padding:1rem;}
+
+/* SUMMARY BAR */
+.summary-bar{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:1rem;}
+@media(max-width:900px){.summary-bar{grid-template-columns:repeat(4,1fr);}}
+@media(max-width:500px){.summary-bar{grid-template-columns:repeat(2,1fr);}}
+.smc{background:var(--surface);border-radius:8px;padding:.6rem .9rem;
+  border:1px solid var(--border);box-shadow:var(--shadow);}
+.smc-label{font-size:10px;color:var(--text2);margin-bottom:1px;}
+.smc-value{font-size:18px;font-weight:700;}
+.smc-unit{font-size:10px;color:var(--text2);}
+
+/* ADD FORM */
+.add-form{background:var(--surface);border-radius:10px;border:1px solid var(--border);
+  padding:.9rem 1.1rem;margin-bottom:1rem;display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
+.form-row-title{width:100%;font-size:13px;font-weight:700;margin-bottom:3px;color:var(--text);}
+.form-group{display:flex;flex-direction:column;gap:3px;}
+.form-group label{font-size:10px;color:var(--text2);}
+.form-group input{border:1px solid var(--border);border-radius:6px;
+  padding:6px 9px;font-size:13px;background:var(--surface2);color:var(--text);}
+.form-group input:focus{outline:2px solid var(--accent);border-color:var(--accent);}
+.color-picker-row{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
+.color-dot{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;}
+.color-dot:hover{transform:scale(1.2);}
+.color-dot.selected{border-color:var(--accent);transform:scale(1.15);}
+
+/* BUTTONS */
+.btn{border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer;border:none;font-weight:600;}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:var(--accent2);}
+.btn-sm{font-size:11px;padding:4px 9px;}
+.btn-ai{background:var(--green);color:#fff;font-size:11px;padding:5px 9px;border-radius:5px;border:none;cursor:pointer;}
+.btn-ai:disabled{background:var(--text3);cursor:not-allowed;}
+
+/* TABS */
+.tabs{display:flex;gap:4px;margin-bottom:1rem;flex-wrap:wrap;}
+.tab{padding:6px 13px;border-radius:6px;font-size:12px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);color:var(--text2);font-weight:600;}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* CARDS GRID */
+.persons-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px;}
+@media(max-width:768px){.persons-grid{grid-template-columns:1fr;}}
+@media(max-width:768px){
+  .summary-bar{grid-template-columns:repeat(2,1fr)!important;}
+  .add-form{flex-direction:column;align-items:stretch;}
+  .add-form .form-group input{width:100%!important;}
+  .tabs{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px;}
+  .tab{white-space:nowrap;flex-shrink:0;}
+  header{padding:.4rem .8rem;}
+  .header-right{gap:4px;}
+  .container{padding:.6rem;}
+  #speed-btns{display:none;}
+}
+
+/* PERSON CARD */
+.person-card{background:var(--surface);border-radius:14px;border:1px solid var(--border);
+  padding:1rem;box-shadow:var(--shadow);position:relative;}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.person-meta{display:flex;align-items:center;gap:9px;}
+.avatar{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;flex-shrink:0;cursor:pointer;}
+.avatar:hover{transform:scale(1.1);}
+.pname{font-size:14px;font-weight:700;}
+.psub{font-size:10px;color:var(--text2);}
+.btn-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px;}
+.btn-del:hover{color:var(--red);}
+
+/* ACTIVITY DISPLAY */
+.current-act{display:flex;align-items:center;gap:8px;background:var(--surface2);
+  border-radius:8px;padding:7px 10px;margin-bottom:6px;}
+.act-icon{font-size:20px;}
+.act-info{flex:1;}
+.act-name{font-size:13px;font-weight:600;}
+.act-since{font-size:10px;color:var(--text2);}
+.act-mood{font-size:10px;color:var(--text3);margin-left:auto;}
+.prog-bar{height:3px;background:var(--border);border-radius:2px;margin-bottom:8px;}
+.prog-fill{height:100%;border-radius:2px;transition:width .8s ease;}
+
+/* METRIKS - 4 temel */
+.metrics-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px;}
+.mm{text-align:center;background:var(--surface2);border-radius:6px;padding:5px 2px;}
+.mm-val{font-size:14px;font-weight:700;}
+.mm-lbl{font-size:9px;color:var(--text2);}
+
+/* BİYOMETRİK PANEL */
+.bio-panel{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px;
+  padding:8px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);}
+.bio-item{text-align:center;}
+.bio-val{font-size:13px;font-weight:700;}
+.bio-lbl{font-size:9px;color:var(--text2);}
+.bio-item.danger .bio-val{color:var(--red);}
+.bio-item.warn   .bio-val{color:var(--amber);}
+.bio-item.good   .bio-val{color:var(--green);}
+
+/* KONUM SATIRI */
+.location-row{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text3);
+  margin-bottom:7px;padding:4px 7px;background:var(--surface2);border-radius:6px;}
+
+/* CHART DONUT */
+.chart-section{border-top:1px solid var(--border);padding-top:8px;}
+.chart-section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.chart-label{font-size:10px;color:var(--text2);font-weight:600;}
+.chart-row{display:flex;align-items:center;gap:8px;}
+.chart-wrap{position:relative;width:75px;height:75px;flex-shrink:0;}
+.chart-legend{font-size:9px;color:var(--text2);display:flex;flex-direction:column;gap:3px;}
+.legend-item{display:flex;align-items:center;gap:4px;}
+.legend-box{width:7px;height:7px;border-radius:2px;flex-shrink:0;}
+
+/* MINI SENSÖR GRAFİĞİ */
+.mini-chart-wrap{border-top:1px solid var(--border);padding-top:7px;margin-top:3px;}
+.mini-chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.mini-chart-tabs{display:flex;gap:3px;}
+.mct{font-size:9px;padding:2px 6px;border-radius:4px;cursor:pointer;
+  border:1px solid var(--border);background:none;color:var(--text2);}
+.mct.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* AI KUTUSU */
+.ai-comment{background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;margin-top:7px;
+  font-size:11px;color:var(--text2);line-height:1.6;display:none;}
+.ai-comment.visible{display:block;}
+
+/* TİMELINE */
+.timeline-panel{display:none;border-top:1px solid var(--border);padding-top:8px;margin-top:3px;}
+.timeline-panel.open{display:block;}
+.tl-item{display:flex;align-items:flex-start;gap:7px;padding:4px 0;
+  border-bottom:1px solid var(--border);font-size:10px;}
+.tl-item:last-child{border-bottom:none;}
+.tl-time{color:var(--text3);min-width:38px;}
+.tl-dot{width:6px;height:6px;border-radius:50%;margin-top:3px;flex-shrink:0;}
+.tl-name{color:var(--text);}
+.tl-hr{color:var(--text3);margin-left:auto;font-size:9px;}
+
+/* COMPARE */
+.compare-wrap{background:var(--surface);border-radius:12px;border:1px solid var(--border);overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px;}
+th{background:var(--surface2);padding:8px 11px;text-align:left;
+  font-weight:700;font-size:10px;color:var(--text2);border-bottom:1px solid var(--border);}
+td{padding:8px 11px;border-bottom:1px solid var(--border);color:var(--text);}
+tr:last-child td{border-bottom:none;}
+.td-hr{font-weight:600;}
+.td-hr.danger{color:var(--red);}
+.td-hr.warn{color:var(--amber);}
+.td-spo2.low{color:var(--red);}
+.td-stress.high{color:var(--red);}
+.td-stress.med{color:var(--amber);}
+
+/* ANOMALİ */
+.anomaly-wrap{background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:.9rem;}
+.anomaly-item{display:flex;align-items:center;gap:8px;padding:6px 0;
+  border-bottom:1px solid var(--border);font-size:11px;}
+.anomaly-item:last-child{border-bottom:none;}
+.anm-badge{border-radius:5px;padding:2px 6px;font-size:10px;font-weight:700;flex-shrink:0;}
+.sev-critical{background:#fcebeb;color:#a32d2d;}
+.sev-warning{background:#fff4e0;color:#7a4e00;}
+.sev-info{background:#e8f4fc;color:#1a5276;}
+[data-theme="dark"] .sev-critical{background:#3a1515;color:#f09595;}
+[data-theme="dark"] .sev-warning{background:#3a2e00;color:#f0c080;}
+[data-theme="dark"] .sev-info{background:#102030;color:#80b8f0;}
+.anm-person{font-weight:700;color:var(--accent);min-width:100px;}
+.anm-msg{flex:1;color:var(--text2);}
+.anm-time{color:var(--text3);font-size:10px;white-space:nowrap;}
+
+/* HARİTA TAB */
+.map-container{background:var(--surface);border-radius:12px;border:1px solid var(--border);overflow:hidden;}
+#leaflet-map{height:480px;width:100%;}
+
+/* CANLI GRAFİK */
+.live-chart-card{background:var(--surface);border-radius:12px;border:1px solid var(--border);
+  padding:.9rem;margin-bottom:12px;box-shadow:var(--shadow);}
+.live-select{border:1px solid var(--border);border-radius:6px;
+  padding:4px 8px;font-size:12px;background:var(--surface2);color:var(--text);margin-right:6px;}
+
+/* HAFTALIK */
+.weekly-card{background:var(--surface);border-radius:12px;border:1px solid var(--border);
+  padding:.9rem;box-shadow:var(--shadow);}
+
+/* TOAST */
+#toast-container{position:fixed;top:56px;right:14px;z-index:9999;display:flex;flex-direction:column;gap:7px;}
+.toast{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;font-size:11px;box-shadow:var(--shadow);
+  display:flex;align-items:center;gap:7px;min-width:200px;animation:slideIn .25s ease;}
+@keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
+.toast-icon{font-size:15px;}
+.toast-msg{flex:1;color:var(--text);}
+.toast-close{color:var(--text3);cursor:pointer;font-size:13px;}
+.toast.warn{border-left:3px solid var(--amber);}
+.toast.err{border-left:3px solid var(--red);}
+.toast.ok{border-left:3px solid var(--green);}
+.toast.critical{border-left:3px solid var(--red);background:#fff0f0;}
+[data-theme="dark"] .toast.critical{background:#2a1515;}
+
+.empty-state{text-align:center;color:var(--text3);padding:2rem;font-size:13px;}
+.section-title{font-size:14px;font-weight:700;margin-bottom:.9rem;color:var(--text);}
+
+/* NABIZ ANIMASYON */
+@keyframes heartbeat{0%,100%{transform:scale(1)}20%{transform:scale(1.25)}40%{transform:scale(1)}}
+.heart-anim{display:inline-block;animation:heartbeat .8s infinite;}
+
+/* SÜRÜKLE-BIRAK */
+.person-card.dragging{opacity:0.4;border:2px dashed var(--accent);}
+.person-card.drag-over{border:2px solid var(--accent);transform:scale(1.01);}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;
+  display:flex;align-items:center;justify-content:center;}
+.modal-box{background:var(--surface);border-radius:12px;border:1px solid var(--border);
+  padding:1.5rem;min-width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.2);}
+.modal-title{font-size:14px;font-weight:700;margin-bottom:1rem;color:var(--text);}
+.modal-field{margin-bottom:12px;}
+.modal-field label{display:block;font-size:11px;color:var(--text2);margin-bottom:4px;}
+.modal-field input{width:100%;border:1px solid var(--border);border-radius:6px;
+  padding:6px 9px;font-size:13px;background:var(--surface2);color:var(--text);}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:1rem;}
+
+/* TREND BADGE */
+.trend-up{color:#1d9e75;font-weight:700;}
+.trend-down{color:#e24b4a;font-weight:700;}
+.trend-stable{color:var(--text3);}
+
+/* BİLDİRİM MERKEZİ */
+.notif-btn{position:relative;background:none;border:1px solid var(--border);border-radius:6px;
+  padding:4px 9px;cursor:pointer;font-size:14px;color:var(--text2);}
+.notif-btn:hover{background:var(--surface2);}
+.notif-badge{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;
+  border-radius:50%;width:16px;height:16px;font-size:9px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;display:none;}
+.notif-badge.show{display:flex;}
+.notif-panel{position:fixed;top:52px;right:14px;width:340px;max-height:480px;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.2);z-index:500;display:none;overflow:hidden;}
+.notif-panel.open{display:flex;flex-direction:column;}
+.notif-header{padding:12px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;}
+.notif-title{font-size:13px;font-weight:700;color:var(--text);}
+.notif-clear{font-size:11px;color:var(--accent);cursor:pointer;border:none;background:none;}
+.notif-list{overflow-y:auto;flex:1;}
+.notif-item{padding:10px 14px;border-bottom:1px solid var(--border);
+  display:flex;gap:10px;align-items:flex-start;cursor:pointer;}
+.notif-item:hover{background:var(--surface2);}
+.notif-item.unread{background:var(--surface2);}
+.notif-icon{font-size:18px;flex-shrink:0;margin-top:1px;}
+.notif-body{flex:1;}
+.notif-msg{font-size:11px;color:var(--text);line-height:1.4;}
+.notif-time{font-size:10px;color:var(--text3);margin-top:2px;}
+.notif-empty{text-align:center;color:var(--text3);padding:2rem;font-size:12px;}
+
+/* RADAR GRAFİĞİ */
+.radar-wrap{position:relative;height:220px;}
+
+/* ZAMANÇİZELGESİ */
+.timeline-day{margin-bottom:1.2rem;}
+.timeline-day-label{font-size:11px;font-weight:700;color:var(--text2);
+  margin-bottom:6px;padding:3px 8px;background:var(--surface2);border-radius:6px;display:inline-block;}
+.timeline-track{position:relative;height:36px;background:var(--surface2);border-radius:8px;overflow:hidden;}
+.timeline-block{position:absolute;height:100%;border-radius:4px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-size:11px;
+  transition:filter .15s;overflow:hidden;}
+.timeline-block:hover{filter:brightness(1.15);z-index:2;}
+.timeline-hours{display:flex;margin-top:3px;}
+.timeline-hour{flex:1;font-size:8px;color:var(--text3);text-align:center;}
+.tl-tooltip{position:fixed;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;font-size:11px;box-shadow:0 4px 16px rgba(0,0,0,0.15);
+  z-index:999;pointer-events:none;display:none;max-width:200px;}
+
+/* GİRİŞ ANİMASYONU */
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.person-card{animation:fadeSlideIn .3s ease;}
+.smc{animation:fadeSlideIn .25s ease;}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+
+<header>
+  <span class="logo">📡 <span data-i="app_title">Aktivite Sensör İzleme</span></span>
+  <div class="header-right">
+    <div id="weather-badge">⏳ <span id="weather-text">—</span></div>
+    <div style="display:flex;gap:2px;">
+      <button class="lang-btn active" id="btn-tr" onclick="setLang('tr')">TR</button>
+      <button class="lang-btn"        id="btn-en" onclick="setLang('en')">EN</button>
+    </div>
+    <button class="hbtn" onclick="toggleTheme()" id="theme-btn">🌙</button>
+    <button class="notif-btn" onclick="toggleNotifPanel()" id="notif-btn" title="Bildirimler">
+      🔔<span class="notif-badge" id="notif-badge">0</span>
+    </button>
+    <div style="display:flex;gap:2px;" id="speed-btns">
+      <button class="hbtn" onclick="setSimSpeed(1)"  id="spd-1" style="font-size:10px;font-weight:700">1x</button>
+      <button class="hbtn" onclick="setSimSpeed(2)"  id="spd-2" style="font-size:10px">2x</button>
+      <button class="hbtn" onclick="setSimSpeed(5)"  id="spd-5" style="font-size:10px">5x</button>
+    </div>
+    <div class="live-dot" id="ws-dot" title="WebSocket bağlantısı"></div>
+    <span id="clock" style="font-size:11px;color:var(--text2);">--:--:--</span>
+  </div>
+</header>
+
+<!-- BİLDİRİM PANELİ -->
+<div class="notif-panel" id="notif-panel">
+  <div class="notif-header">
+    <span class="notif-title">🔔 Bildirimler</span>
+    <button class="notif-clear" onclick="clearNotifs()">Tümünü temizle</button>
+  </div>
+  <div class="notif-list" id="notif-list">
+    <div class="notif-empty">Henüz bildirim yok</div>
+  </div>
+</div>
+
+<!-- TOOLTIP -->
+<div class="tl-tooltip" id="tl-tooltip"></div>
+
+<div class="container">
+
+  <!-- ÖZET BAR -->
+  <div class="summary-bar">
+    <div class="smc"><div class="smc-label" data-i="total_persons">Toplam kişi</div>
+      <span class="smc-value" id="s-total">—</span></div>
+    <div class="smc"><div class="smc-label" data-i="avg_steps">Ort. adım</div>
+      <span class="smc-value" id="s-steps">—</span></div>
+    <div class="smc"><div class="smc-label" data-i="avg_cal">Ort. kalori</div>
+      <span class="smc-value" id="s-cal">—</span></div>
+    <div class="smc"><div class="smc-label" data-i="avg_active">Ort. aktif dk</div>
+      <span class="smc-value" id="s-active">—</span></div>
+    <div class="smc"><div class="smc-label" data-i="avg_hr">Ort. nabız</div>
+      <span class="smc-value" id="s-hr" style="color:var(--red)">—</span>
+      <span class="smc-unit">bpm</span></div>
+    <div class="smc"><div class="smc-label" data-i="avg_stress">Ort. stres</div>
+      <span class="smc-value" id="s-stress" style="color:var(--amber)">—</span>
+      <span class="smc-unit">/100</span></div>
+    <div class="smc" style="border-left:3px solid var(--red)">
+      <div class="smc-label" data-i="anomalies">Anomali (1s)</div>
+      <span class="smc-value" id="s-anomaly" style="color:var(--red)">—</span></div>
+  </div>
+
+  <!-- KİŞİ EKLE -->
+  <div class="add-form">
+    <div class="form-row-title" data-i="add_person">Yeni kişi ekle</div>
+    <div class="form-group">
+      <label data-i="name">İsim *</label>
+      <input type="text" id="f-name" placeholder="Ahmet Çelik" style="width:145px"/>
+    </div>
+    <div class="form-group">
+      <label data-i="age">Yaş</label>
+      <input type="number" id="f-age" placeholder="30" min="10" max="90" style="width:60px"/>
+    </div>
+    <div class="form-group">
+      <label data-i="city">Şehir</label>
+      <input type="text" id="f-city" placeholder="İstanbul" style="width:110px"/>
+    </div>
+    <div class="form-group">
+      <label data-i="avatar_color">Renk</label>
+      <div class="color-picker-row" id="color-picker"></div>
+    </div>
+    <button class="btn btn-primary" onclick="addPerson()" data-i="add_btn">+ Ekle</button>
+  </div>
+
+  <!-- SEKMELER -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('cards',this)"     data-i="tab_cards">Kişi Kartları</button>
+    <button class="tab"        onclick="switchTab('live',this)"      data-i="tab_live">Canlı Grafik</button>
+    <button class="tab"        onclick="switchTab('map',this)"       data-i="tab_map">🗺 Harita</button>
+    <button class="tab"        onclick="switchTab('compare',this)"   data-i="tab_compare">Karşılaştırma</button>
+    <button class="tab"        onclick="switchTab('anomalies',this)" data-i="tab_anomalies">Anomaliler</button>
+    <button class="tab"        onclick="switchTab('weekly',this)"    data-i="tab_weekly">Haftalık</button>
+    <button class="tab"        onclick="switchTab('analysis',this)"  id="tab-btn-analysis">📊 Analiz</button>
+    <button class="tab"        onclick="switchTab('alerts',this)"   id="tab-btn-alerts">🔔 Akıllı Uyarılar</button>
+    <button class="tab"        onclick="switchTab('timeline',this)" id="tab-btn-timeline">⏰ Zaman Çizelgesi</button>
+  </div>
+
+  <!-- KİŞİ KARTLARI -->
+  <div id="tab-cards">
+    <div class="persons-grid" id="persons-grid"></div>
+  </div>
+
+  <!-- CANLI GRAFİK -->
+  <div id="tab-live" style="display:none">
+    <div class="live-chart-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <select class="live-select" id="live-person-select" onchange="initLiveChart()"></select>
+        <select class="live-select" id="live-metric-select" onchange="initLiveChart()">
+          <option value="steps"        data-i="steps">Adım</option>
+          <option value="calories"     data-i="calories">Kalori</option>
+          <option value="active_mins"  data-i="active_mins">Aktif süre</option>
+          <option value="heart_rate"   data-i="heart_rate">Nabız (bpm)</option>
+          <option value="spo2"         data-i="spo2">SpO₂ (%)</option>
+          <option value="stress_level" data-i="stress_level">Stres Skoru</option>
+          <option value="hrv"          data-i="hrv">HRV</option>
+        </select>
+        <span style="font-size:10px;color:var(--text3)" data-i="live_hint">Son 60 ölçüm</span>
+      </div>
+      <div style="position:relative;height:220px"><canvas id="liveLineChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- HARİTA -->
+  <div id="tab-map" style="display:none">
+    <div class="map-container">
+      <div id="leaflet-map"></div>
+    </div>
+  </div>
+
+  <!-- KARŞILAŞTIRMA -->
+  <div id="tab-compare" style="display:none">
+    <p class="section-title" data-i="compare_title">Kişiler arası karşılaştırma</p>
+    <div class="compare-wrap">
+      <table>
+        <thead><tr>
+          <th>#</th><th data-i="name">İsim</th><th data-i="city">Şehir</th>
+          <th data-i="steps">Adım</th><th data-i="calories">Kalori</th>
+          <th data-i="active_mins">Aktif dk</th>
+          <th data-i="heart_rate">Nabız</th><th data-i="spo2">SpO₂</th>
+          <th data-i="stress_lbl">Stres</th><th data-i="hrv_lbl">HRV</th>
+          <th data-i="sleep">Uyku</th>
+        </tr></thead>
+        <tbody id="compare-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ANOMALİLER -->
+  <div id="tab-anomalies" style="display:none">
+    <p class="section-title" data-i="anomaly_title">Tespit edilen anomaliler</p>
+    <div class="anomaly-wrap" id="anomaly-list"></div>
+  </div>
+
+  <!-- HAFTALIK RAPOR -->
+  <div id="tab-analysis" style="display:none">
+    <div id="analysis-container">
+      <div style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:1rem;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <select class="live-select" id="analysis-person-select" onchange="loadAnalysis()"></select>
+          <select class="live-select" id="analysis-days-select" onchange="loadAnalysis()">
+            <option value="7">Son 7 gün</option>
+            <option value="14" selected>Son 14 gün</option>
+            <option value="30">Son 30 gün</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="downloadAnalysisPDF()">📄 PDF Rapor</button>
+          <button class="btn btn-sm" onclick="loadDailyProfile()"
+            style="background:var(--accent);color:#fff">🔬 Günlük Profil & Tahmin</button>
+          <div style="display:flex;gap:4px;">
+            <button class="btn btn-sm" onclick="exportData('activity')"
+              style="background:var(--green);color:#fff;font-size:10px">📊 Aktivite CSV</button>
+            <button class="btn btn-sm" onclick="exportData('sensor')"
+              style="background:var(--blue);color:#fff;font-size:10px">📡 Sensör CSV</button>
+            <button class="btn btn-sm" onclick="exportData('daily')"
+              style="background:var(--amber);color:#fff;font-size:10px">📅 Günlük CSV</button>
+          </div>
+          <span id="analysis-loading" style="font-size:11px;color:var(--text3);display:none">Yükleniyor...</span>
+        </div>
+      </div>
+      <div id="analysis-content"><div class="empty-state">Kişi seçin</div></div>
+      <!-- Günlük profil paneli — ayrı bölüm -->
+      <div id="daily-profile-content" style="margin-top:14px"></div>
+    </div>
+  </div>
+
+  <!-- AKILLI UYARILAR -->
+  <div id="tab-alerts" style="display:none">
+    <div style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--text)">🔔 Akıllı Uyarılar</div>
+      <div id="alerts-list"><div class="empty-state">Yükleniyor...</div></div>
+    </div>
+  </div>
+
+  <!-- ZAMANÇİZELGESİ -->
+  <div id="tab-timeline" style="display:none">
+    <div style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:1rem;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <select class="live-select" id="timeline-person-select" onchange="loadTimeline()"></select>
+        <select class="live-select" id="timeline-days-select" onchange="loadTimeline()">
+          <option value="3">Son 3 gün</option>
+          <option value="7" selected>Son 7 gün</option>
+        </select>
+        <span id="timeline-loading" style="font-size:11px;color:var(--text3);display:none">Yükleniyor...</span>
+      </div>
+    </div>
+    <div id="timeline-content"></div>
+  </div>
+
+  <div id="tab-weekly" style="display:none">
+    <div class="weekly-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <select class="live-select" id="weekly-person-select" onchange="loadWeekly()"></select>
+        <button class="btn btn-primary btn-sm" onclick="downloadPDF()" data-i="pdf_btn">⬇ PDF İndir</button>
+      </div>
+      <div style="position:relative;height:200px;margin-bottom:1rem"><canvas id="weeklyChart"></canvas></div>
+      <div id="weekly-table"></div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- LEAFLET CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const API = "/api";
+
+// ── WEBSOCKET BAĞLANTISI ─────────────────────────────────────────────────────
+const socket = io();
+let wsConnected = false;
+
+socket.on("connect", ()=>{
+  wsConnected = true;
+  // Yeşil dot canlandır
+  document.querySelectorAll(".live-dot").forEach(d=>d.style.background="var(--green)");
+  console.log("WebSocket bağlandı");
+});
+
+socket.on("disconnect", ()=>{
+  wsConnected = false;
+  document.querySelectorAll(".live-dot").forEach(d=>d.style.background="var(--red)");
+  console.log("WebSocket bağlantısı kesildi");
+});
+
+// Anlık kişi durumu güncellemesi
+socket.on("state_update", (data)=>{
+  if(!data || !data.person_id) return;
+  const pid = data.person_id;
+  // Kart yoksa oluştur, varsa güncelle
+  if(!st.persons[pid]){
+    // Yeni kişi geldi — tam fetchAll çek
+    fetchAll();
+    return;
+  }
+  st.persons[pid] = {...st.persons[pid], ...data};
+  patchCard(st.persons[pid]);
+  updateLiveChart();
+});
+
+// Anlık anomali bildirimi
+socket.on("anomaly", (a)=>{
+  if(!seenAnomalies.has(a.detected_at)){
+    seenAnomalies.add(a.detected_at);
+    const person = Object.values(st.persons).find(p=>p.person_id===a.person_id||p.id===a.person_id);
+    const name   = person ? person.name : "Bilinmiyor";
+    const msg    = a.message_tr;
+    const type   = a.severity==="critical" ? "critical" : "warn";
+    showToast(name+" — "+msg, type, 5000, name);
+    // Anomali listesini güncelle
+    fetchAnomalies();
+  }
+});
+
+// Anlık akıllı uyarı
+socket.on("smart_alert", (a)=>{
+  const person = Object.values(st.persons).find(p=>p.id===a.person_id);
+  const name   = person ? person.name : "Bilinmiyor";
+  showToast(name+" — "+a.message_tr, "warn", 5000, name);
+  // Akıllı uyarılar sekmesindeyse güncelle
+  const alertsTab = document.getElementById("tab-alerts");
+  if(alertsTab && alertsTab.style.display !== "none"){
+    loadSmartAlerts();
+  }
+});
+
+// ── ÇEVIRI ──────────────────────────────────────────────────────────────────
+let lang = localStorage.getItem("lang") || "tr";
+const i18n = {
+  tr: {
+    app_title:"Aktivite Sensör İzleme",
+    total_persons:"Toplam kişi", avg_steps:"Ort. adım", avg_cal:"Ort. kalori",
+    avg_active:"Ort. aktif dk", avg_hr:"Ort. nabız", avg_stress:"Ort. stres",
+    anomalies:"Anomali (1s)",
+    add_person:"Yeni kişi ekle", name:"İsim *", age:"Yaş", city:"Şehir",
+    avatar_color:"Renk", add_btn:"+ Ekle",
+    tab_cards:"Kişi Kartları", tab_live:"Canlı Grafik", tab_map:"🗺 Harita",
+    tab_compare:"Karşılaştırma", tab_anomalies:"Anomaliler", tab_weekly:"Haftalık",
+    compare_title:"Kişiler arası karşılaştırma", anomaly_title:"Tespit edilen anomaliler",
+    steps:"Adım", calories:"Kalori", active_mins:"Aktif dk",
+    heart_rate:"Nabız", spo2:"SpO₂", stress_level:"Stres",
+    hrv:"HRV", stress_lbl:"Stres", hrv_lbl:"HRV",
+    screen:"Ekran dk", meals:"Öğün", sleep:"Uyku",
+    pdf_btn:"⬇ PDF İndir",
+    live_hint:"Son 60 ölçüm", now_doing:"Şu an:", for_mins:" dk",
+    act_dist:"Aktivite dağılımı", ai_btn:"AI analiz", ai_analyzing:"Analiz...",
+    ai_again:"Yeniden", show_timeline:"Geçmiş", hide_timeline:"Gizle",
+    no_person:"Henüz kişi yok.", no_anomaly:"Henüz anomali yok.",
+    dark_mode:"🌙 Gece", light_mode:"☀️ Gündüz",
+    active:"Aktif", rest:"Dinlenme", meal:"Yemek", sleep_l:"Uyku",
+    warn:"UYARI", critical_lbl:"KRİTİK", info_lbl:"BİLGİ",
+    day:"Gün", notif_anomaly:"Anomali:",
+    bio_hr:"Nabız", bio_spo2:"SpO₂", bio_temp:"Sıcaklık", bio_hrv:"HRV", bio_stress:"Stres",
+    loc_label:"Konum:",
+    mini_hr:"Nabız", mini_spo2:"SpO₂", mini_stress:"Stres",
+  },
+  en: {
+    app_title:"Activity Sensor Monitor",
+    total_persons:"Total people", avg_steps:"Avg steps", avg_cal:"Avg calories",
+    avg_active:"Avg active min", avg_hr:"Avg HR", avg_stress:"Avg stress",
+    anomalies:"Anomalies (1h)",
+    add_person:"Add new person", name:"Name *", age:"Age", city:"City",
+    avatar_color:"Color", add_btn:"+ Add",
+    tab_cards:"Person Cards", tab_live:"Live Chart", tab_map:"🗺 Map",
+    tab_compare:"Compare", tab_anomalies:"Anomalies", tab_weekly:"Weekly",
+    compare_title:"Person comparison", anomaly_title:"Detected anomalies",
+    steps:"Steps", calories:"Calories", active_mins:"Active min",
+    heart_rate:"Heart rate", spo2:"SpO₂", stress_level:"Stress",
+    hrv:"HRV", stress_lbl:"Stress", hrv_lbl:"HRV",
+    screen:"Screen min", meals:"Meals", sleep:"Sleep",
+    pdf_btn:"⬇ Download PDF",
+    live_hint:"Last 60 readings", now_doing:"Now:", for_mins:" min",
+    act_dist:"Activity distribution", ai_btn:"AI analysis", ai_analyzing:"Analyzing...",
+    ai_again:"Retry", show_timeline:"History", hide_timeline:"Hide",
+    no_person:"No people yet.", no_anomaly:"No anomalies yet.",
+    dark_mode:"🌙 Dark", light_mode:"☀️ Light",
+    active:"Active", rest:"Rest", meal:"Meal", sleep_l:"Sleep",
+    warn:"WARN", critical_lbl:"CRITICAL", info_lbl:"INFO",
+    day:"Day", notif_anomaly:"Anomaly:",
+    bio_hr:"HR", bio_spo2:"SpO₂", bio_temp:"Temp", bio_hrv:"HRV", bio_stress:"Stress",
+    loc_label:"Location:",
+    mini_hr:"HR", mini_spo2:"SpO₂", mini_stress:"Stress",
+  }
+};
+function t(k){ return i18n[lang][k] || k; }
+function applyLang(){
+  document.querySelectorAll("[data-i]").forEach(el => {
+    const k = el.getAttribute("data-i");
+    if(i18n[lang][k]) el.textContent = i18n[lang][k];
+  });
+  document.getElementById("btn-tr").classList.toggle("active", lang==="tr");
+  document.getElementById("btn-en").classList.toggle("active", lang==="en");
+  document.getElementById("theme-btn").textContent =
+    document.documentElement.getAttribute("data-theme")==="dark" ? "☀️" : "🌙";
+}
+function setLang(l){ lang=l; localStorage.setItem("lang",l); applyLang(); }
+
+// ── TEMA ────────────────────────────────────────────────────────────────────
+function toggleTheme(){
+  const isDark = document.documentElement.getAttribute("data-theme")==="dark";
+  document.documentElement.setAttribute("data-theme", isDark?"light":"dark");
+  localStorage.setItem("theme", isDark?"light":"dark");
+  document.getElementById("theme-btn").textContent = isDark ? "🌙" : "☀️";
+}
+(function(){
+  const saved = localStorage.getItem("theme") || "light";
+  document.documentElement.setAttribute("data-theme", saved);
+})();
+
+// ── RENK PICKER ─────────────────────────────────────────────────────────────
+const COLORS = ["#CECBF6","#9FE1CB","#F5C4B3","#F4C0D1","#B5D4F4","#C0DD97","#FAC775","#F7C1C1"];
+let selectedColor = COLORS[0];
+function buildColorPicker(cid, cur){
+  const el = document.getElementById(cid); if(!el) return;
+  el.innerHTML = COLORS.map(c=>
+    `<div class="color-dot${c===cur?" selected":""}" style="background:${c}"
+      onclick="selectColor('${c}','${cid}')"></div>`).join("");
+}
+function selectColor(c, cid){
+  selectedColor = c;
+  document.querySelectorAll(`#${cid} .color-dot`).forEach(d=>
+    d.classList.toggle("selected", d.style.background===c||d.style.backgroundColor===c));
+}
+buildColorPicker("color-picker", selectedColor);
+
+// ── TOAST ────────────────────────────────────────────────────────────────────
+const seenAnomalies = new Set();
+function showToast(msg, type="ok", duration=4500, person=""){
+  // Bildirim merkezine de ekle
+  if(type==="warn"||type==="critical"||type==="err"){
+    addNotif(msg, type, person);
+  }
+  const icons = {ok:"✅",warn:"⚠️",err:"❌",critical:"🚨"};
+  const el = document.createElement("div");
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span class="toast-icon">${icons[type]||"ℹ️"}</span>
+    <span class="toast-msg">${msg}</span>
+    <span class="toast-close" onclick="this.parentElement.remove()">✕</span>`;
+  document.getElementById("toast-container").appendChild(el);
+  if(type==="warn"||type==="critical"||type==="err"){
+    try{
+      const ctx = new(window.AudioContext||window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const g   = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.frequency.value = type==="critical"?880:550;
+      g.gain.setValueAtTime(0.12,ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.5);
+      osc.start(); osc.stop(ctx.currentTime+0.5);
+    }catch(e){}
+  }
+  setTimeout(()=>el.remove(), duration);
+}
+
+// ── SEKME ────────────────────────────────────────────────────────────────────
+let mapInited = false;
+function switchTab(tab, btn){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  btn.classList.add("active");
+  ["cards","live","map","compare","anomalies","weekly","analysis","alerts","timeline"].forEach(t=>{
+    const el=document.getElementById("tab-"+t);
+    if(el) el.style.display = t===tab?"":"none";
+  });
+  if(tab==="weekly")   loadWeekly();
+  if(tab==="map" && !mapInited){ initMap(); mapInited=true; }
+  if(tab==="live")     initLiveChart();
+  if(tab==="analysis") loadAnalysis();
+  if(tab==="alerts")   loadSmartAlerts();
+  if(tab==="timeline") loadTimeline();
+}
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+const st = { persons:{}, charts:{}, miniCharts:{}, miniMetrics:{} };
+let fetching = false;
+
+// ── BIYOMETRIK RENK HESAPLAMA ────────────────────────────────────────────────
+function hrClass(hr){
+  if(hr>160||hr<45) return "danger";
+  if(hr>130||hr<55) return "warn";
+  return "good";
+}
+function spo2Class(v){
+  if(v<93) return "danger";
+  if(v<96) return "warn";
+  return "good";
+}
+function tempClass(v){
+  if(v>38.0) return "danger";
+  if(v>37.4) return "warn";
+  return "good";
+}
+function stressClass(v){
+  if(v>75) return "danger";
+  if(v>50) return "warn";
+  return "";
+}
+function hrvClass(v){
+  if(v<15) return "danger";
+  if(v<30) return "warn";
+  return "good";
+}
+
+// ── KART HTML ────────────────────────────────────────────────────────────────
+function buildCardHTML(p){
+  const initials = (p.name||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+  const hr  = p.heart_rate  || 70;
+  const spo = p.spo2        || 98;
+  const tmp = p.skin_temp   || 36.5;
+  const hrv = p.hrv         || 45;
+  const str = p.stress_level|| 30;
+  const typeColors = {active:"#534AB7",rest:"#5DCAA5",meal:"#EF9F27",sleep:"#85B7EB"};
+  const locIcons   = {ev:"🏠",ofis:"💼",dışarı:"🌳",home:"🏠",office:"💼",outside:"🌳"};
+  const loc = p.location_name || "ev";
+  return `
+  <div class="card-header">
+    <div class="person-meta">
+      <div class="avatar" style="background:${p.avatar_color||'#CECBF6'}"
+        onclick="changeAvatarColor(${p.id})">${initials}</div>
+      <div>
+        <div class="pname">${p.name}</div>
+        <div class="psub">${p.age||"—"} yaş · ${p.city||"—"}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:4px;align-items:center">
+      <button class="btn-del" onclick="showThresholdModal(${p.id})" title="Anomali eşiği" style="font-size:12px;color:var(--text3)">⚙️</button>
+      <button class="btn-del" onclick="deletePerson(${p.id},'${p.name}')" title="Sil">✕</button>
+    </div>
+  </div>
+
+  <div class="current-act">
+    <span class="act-icon" id="ci-${p.id}">${p.activity_icon||"⏳"}</span>
+    <div class="act-info">
+      <div class="act-name" id="cn-${p.id}">${p.activity_name||"—"}</div>
+      <div class="act-since" id="cs-${p.id}">${p.since_mins||0} dk</div>
+    </div>
+    <span class="act-mood" id="cm-${p.id}">${p.mood||""}</span>
+  </div>
+  <div class="prog-bar"><div class="prog-fill" id="pf-${p.id}"
+    style="width:${p.progress||0}%;background:${p.activity_color||'#534AB7'}"></div></div>
+
+  <!-- 4 temel metrik -->
+  <div class="metrics-mini">
+    <div class="mm"><div class="mm-val" id="ms-${p.id}">${(p.steps||0).toLocaleString("tr-TR")}</div>
+      <div class="mm-lbl" data-i="steps">Adım</div></div>
+    <div class="mm"><div class="mm-val" id="ma-${p.id}">${p.active_mins||0}</div>
+      <div class="mm-lbl" data-i="active_mins">Aktif dk</div></div>
+    <div class="mm"><div class="mm-val" id="mc-${p.id}">${Math.round(p.calories||0)}</div>
+      <div class="mm-lbl" data-i="calories">Kalori</div></div>
+    <div class="mm"><div class="mm-val" id="mu-${p.id}">${p.sleep_score?p.sleep_score+"/10":"—"}</div>
+      <div class="mm-lbl" data-i="sleep">Uyku</div></div>
+  </div>
+
+  <!-- Trend okları -->
+  <div style="display:flex;gap:6px;margin-bottom:7px;font-size:10px;" id="trend-${p.id}">
+    <span style="color:var(--text3)">Trend (7g):</span>
+    <span id="tr-steps-${p.id}" style="color:var(--text3)">— adım</span>
+    <span id="tr-active-${p.id}" style="color:var(--text3)">— aktif</span>
+    <span id="tr-sleep-${p.id}" style="color:var(--text3)">— uyku</span>
+  </div>
+
+  <!-- Biyometrik panel -->
+  <div class="bio-panel">
+    <div class="bio-item ${hrClass(hr)}" id="bhr-${p.id}">
+      <div class="bio-val"><span class="heart-anim">❤️</span> <span id="bhrv-${p.id}">${hr}</span></div>
+      <div class="bio-lbl" data-i="bio_hr">Nabız bpm</div>
+    </div>
+    <div class="bio-item ${spo2Class(spo)}" id="bspo-${p.id}">
+      <div class="bio-val">🫁 <span id="bspov-${p.id}">${spo}%</span></div>
+      <div class="bio-lbl" data-i="bio_spo2">SpO₂</div>
+    </div>
+    <div class="bio-item ${tempClass(tmp)}" id="btmp-${p.id}">
+      <div class="bio-val">🌡 <span id="btmpv-${p.id}">${tmp}°C</span></div>
+      <div class="bio-lbl" data-i="bio_temp">Sıcaklık</div>
+    </div>
+    <div class="bio-item" id="bstr-${p.id}">
+      <div class="bio-val">🧠 <span id="bstrv-${p.id}">${str}</span></div>
+      <div class="bio-lbl" data-i="bio_stress">Stres</div>
+    </div>
+  </div>
+
+  <!-- Konum -->
+  <div class="location-row">
+    <span data-i="loc_label">Konum:</span>
+    <span id="loc-icon-${p.id}">${locIcons[loc]||"📍"}</span>
+    <span id="loc-name-${p.id}">${loc}</span>
+    <span style="margin-left:auto;font-size:9px" id="loc-coord-${p.id}">
+      ${p.latitude?p.latitude.toFixed(4)+", "+p.longitude.toFixed(4):"—"}</span>
+  </div>
+
+  <!-- Aktivite dağılımı + mini sensör grafik -->
+  <div class="chart-section">
+    <div class="chart-section-header">
+      <span class="chart-label" data-i="act_dist">Aktivite dağılımı</span>
+      <div>
+        <button class="btn-ai" id="ai-btn-${p.id}" onclick="analyzeWithAI(${p.id})" data-i="ai_btn">AI analiz</button>
+      </div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-wrap"><canvas id="donut-${p.id}"></canvas></div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-box" style="background:#534AB7"></div><span data-i="active">Aktif</span></div>
+        <div class="legend-item"><div class="legend-box" style="background:#5DCAA5"></div><span data-i="rest">Dinlenme</span></div>
+        <div class="legend-item"><div class="legend-box" style="background:#EF9F27"></div><span data-i="meal">Yemek</span></div>
+        <div class="legend-item"><div class="legend-box" style="background:#85B7EB"></div><span data-i="sleep_l">Uyku</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mini nabız grafiği -->
+  <div class="mini-chart-wrap">
+    <div class="mini-chart-header">
+      <div class="mini-chart-tabs">
+        <button class="mct active" onclick="setMiniMetric(${p.id},'heart_rate',this)">❤️ Nabız</button>
+        <button class="mct"        onclick="setMiniMetric(${p.id},'spo2',this)">🫁 SpO₂</button>
+        <button class="mct"        onclick="setMiniMetric(${p.id},'stress_level',this)">🧠 Stres</button>
+      </div>
+    </div>
+    <div style="position:relative;height:55px"><canvas id="mini-${p.id}"></canvas></div>
+  </div>
+
+  <!-- AI yorum -->
+  <div class="ai-comment" id="ai-box-${p.id}"></div>
+
+  <!-- Timeline -->
+  <div style="margin-top:6px;display:flex;gap:5px">
+    <button class="hbtn btn-sm" id="tl-btn-${p.id}" onclick="toggleTimeline(${p.id})"
+      data-i="show_timeline">Geçmiş</button>
+  </div>
+  <div class="timeline-panel" id="tl-${p.id}"></div>
+  `;
+}
+
+// ── KART GÜNCELLEME ──────────────────────────────────────────────────────────
+const locIcons = {ev:"🏠",ofis:"💼","dışarı":"🌳",home:"🏠",office:"💼",outside:"🌳"};
+function patchCard(p){
+  const set=(id,val)=>{const el=document.getElementById(id);if(el&&el.textContent!==String(val))el.textContent=val;};
+  const actName = lang==="en"&&p.activity_name_en ? p.activity_name_en : (p.activity_name||"—");
+  set("ci-"+p.id, p.activity_icon||"⏳");
+  set("cn-"+p.id, actName);
+  set("cs-"+p.id, (p.since_mins||0)+t("for_mins"));
+  set("cm-"+p.id, p.mood||"");
+  const pf = document.getElementById("pf-"+p.id);
+  if(pf){ pf.style.width=(p.progress||0)+"%"; pf.style.background=p.activity_color||"#534AB7"; }
+  set("ms-"+p.id,(p.steps||0).toLocaleString(lang==="tr"?"tr-TR":"en-US"));
+  set("ma-"+p.id,p.active_mins||0);
+  set("mc-"+p.id,Math.round(p.calories||0));
+  set("mu-"+p.id,p.sleep_score?p.sleep_score+"/10":"—");
+
+  // Biyometrik
+  const hr  = p.heart_rate   || 70;
+  const spo = p.spo2         || 98;
+  const tmp = p.skin_temp    || 36.5;
+  const str = p.stress_level || 30;
+  const hrv = p.hrv          || 45;
+
+  set("bhrv-"+p.id,  hr);
+  set("bspov-"+p.id, spo+"%");
+  set("btmpv-"+p.id, tmp+"°C");
+  set("bstrv-"+p.id, str);
+
+  const bhr  = document.getElementById("bhr-"+p.id);
+  const bspo = document.getElementById("bspo-"+p.id);
+  const btmp = document.getElementById("btmp-"+p.id);
+  const bstr = document.getElementById("bstr-"+p.id);
+  if(bhr)  bhr.className  = "bio-item "+hrClass(hr);
+  if(bspo) bspo.className = "bio-item "+spo2Class(spo);
+  if(btmp) btmp.className = "bio-item "+tempClass(tmp);
+  if(bstr) bstr.className = "bio-item "+stressClass(str);
+
+  // Konum
+  const loc = p.location_name || "ev";
+  set("loc-icon-"+p.id, locIcons[loc]||"📍");
+  set("loc-name-"+p.id, loc);
+  set("loc-coord-"+p.id, p.latitude?p.latitude.toFixed(4)+", "+p.longitude.toFixed(4):"—");
+
+  refreshDonut(p.id, p);
+  pushMiniData(p);
+}
+
+// ── MINI SENSÖR GRAFİĞİ ──────────────────────────────────────────────────────
+const miniData = {};
+const miniMetric = {};
+
+function setMiniMetric(pid, metric, btn){
+  miniMetric[pid] = metric;
+  document.querySelectorAll(`#card-${pid} .mct`).forEach(b=>b.classList.remove("active"));
+  if(btn) btn.classList.add("active");
+  refreshMiniChart(pid);
+}
+
+function pushMiniData(p){
+  const pid = p.id;
+  if(!miniData[pid]) miniData[pid] = {heart_rate:[],spo2:[],stress_level:[]};
+  ["heart_rate","spo2","stress_level"].forEach(m=>{
+    const arr = miniData[pid][m];
+    arr.push(p[m]||0);
+    if(arr.length>40) arr.shift();
+  });
+  refreshMiniChart(pid);
+}
+
+function refreshMiniChart(pid){
+  const metric = miniMetric[pid] || "heart_rate";
+  const data   = (miniData[pid]||{})[metric] || [];
+  const colors = {heart_rate:"#e24b4a",spo2:"#534AB7",stress_level:"#ef9f27"};
+  const col    = colors[metric] || "#534AB7";
+
+  if(!st.miniCharts[pid]){
+    const canvas = document.getElementById("mini-"+pid);
+    if(!canvas) return;
+    st.miniCharts[pid] = new Chart(canvas.getContext("2d"),{
+      type:"line",
+      data:{labels:Array(40).fill(""),
+        datasets:[{data:[...data],borderColor:col,
+          backgroundColor:col+"18",borderWidth:1.5,
+          pointRadius:0,tension:0.4,fill:true}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{x:{display:false},y:{ticks:{color:"#888",font:{size:9}},
+          grid:{color:"rgba(128,128,128,0.07)"},display:true}},
+        animation:{duration:200}}
+    });
+  } else {
+    const ch = st.miniCharts[pid];
+    ch.data.datasets[0].data = [...data];
+    ch.data.datasets[0].borderColor = col;
+    ch.data.datasets[0].backgroundColor = col+"18";
+    ch.update("none");
+  }
+}
+
+// ── DONUT GRAFİĞİ ────────────────────────────────────────────────────────────
+function refreshDonut(pid, p){
+  const ca  = p.chart_active||0, cr = p.chart_rest||0;
+  const cm  = p.chart_meal||0,   cs = p.chart_sleep||8;
+  const tot = ca+cr+cm+cs || 1;
+  const data = [ca/tot*100, cr/tot*100, cm/tot*100, cs/tot*100];
+
+  if(!st.charts[pid]){
+    const canvas = document.getElementById("donut-"+pid);
+    if(!canvas) return;
+    st.charts[pid] = new Chart(canvas.getContext("2d"),{
+      type:"doughnut",
+      data:{datasets:[{data,
+        backgroundColor:["#534AB7","#5DCAA5","#EF9F27","#85B7EB"],
+        borderWidth:0,hoverOffset:3}]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:"68%",
+        plugins:{legend:{display:false},tooltip:{enabled:false}},
+        animation:{duration:400}}
+    });
+  } else {
+    st.charts[pid].data.datasets[0].data = data;
+    st.charts[pid].update("none");
+  }
+}
+
+// ── KART DİFF GÜNCELLEME ─────────────────────────────────────────────────────
+function applyStates(persons){
+  const grid = document.getElementById("persons-grid");
+  const inIds = new Set(persons.map(p=>p.id));
+  Object.keys(st.persons).forEach(id=>{
+    if(!inIds.has(parseInt(id))){
+      const c=document.getElementById("card-"+id); if(c) c.remove();
+      if(st.charts[id]){ st.charts[id].destroy(); delete st.charts[id]; }
+      if(st.miniCharts[id]){ st.miniCharts[id].destroy(); delete st.miniCharts[id]; }
+      delete st.persons[id];
+    }
+  });
+  if(!persons.length){
+    // Sadece daha önce hiç kart yoksa boş mesaj göster
+    if(!Object.keys(st.persons).length && !grid.querySelector(".empty-state"))
+      grid.innerHTML=`<div class="empty-state">${t("no_person")}</div>`;
+    return;
+  }
+  const emp = grid.querySelector(".empty-state"); if(emp) emp.remove();
+  persons.forEach(p=>{
+    if(!st.persons[p.id]){
+      const div = document.createElement("div");
+      div.className="person-card"; div.id="card-"+p.id;
+      div.innerHTML = buildCardHTML(p);
+      grid.appendChild(div);
+      st.persons[p.id] = p;
+      if(!miniMetric[p.id]) miniMetric[p.id] = "heart_rate";
+      requestAnimationFrame(()=>{
+        refreshDonut(p.id,p);
+        pushMiniData(p);
+        initDragDrop(div, p.id);
+        loadPersonTrend(p.id);
+      });
+    } else {
+      st.persons[p.id] = p;
+      patchCard(p);
+    }
+  });
+}
+
+// ── TİMELINE ─────────────────────────────────────────────────────────────────
+const tlOpen = {};
+async function toggleTimeline(pid){
+  const panel = document.getElementById("tl-"+pid);
+  const btn   = document.getElementById("tl-btn-"+pid);
+  if(!panel) return;
+  if(tlOpen[pid]){
+    panel.classList.remove("open"); btn.textContent=t("show_timeline");
+    tlOpen[pid]=false; return;
+  }
+  tlOpen[pid]=true; btn.textContent=t("hide_timeline");
+  panel.innerHTML="<div style='font-size:10px;color:var(--text3)'>Yükleniyor...</div>";
+  panel.classList.add("open");
+  const res  = await fetch(API+"/timeline/"+pid);
+  const data = await res.json();
+  const typeColors = {active:"#534AB7",rest:"#5DCAA5",meal:"#EF9F27",sleep:"#85B7EB"};
+  panel.innerHTML = data.length
+    ? data.slice(0,15).map(e=>{
+        const nm = lang==="en"&&e.activity_name_en?e.activity_name_en:e.activity_name;
+        const dt = new Date(e.recorded_at);
+        const ts = dt.toLocaleTimeString(lang==="tr"?"tr-TR":"en-US",{hour:"2-digit",minute:"2-digit"});
+        return `<div class="tl-item">
+          <span class="tl-time">${ts}</span>
+          <div class="tl-dot" style="background:${typeColors[e.activity_type]||"#888"}"></div>
+          <span class="tl-name">${e.activity_icon} ${nm}</span>
+          <span class="tl-hr">${e.heart_rate_avg?e.heart_rate_avg+" bpm":""}</span>
+        </div>`;}).join("")
+    : `<div style='font-size:10px;color:var(--text3)'>Geçmiş yok</div>`;
+}
+
+// ── AI ANALİZ ────────────────────────────────────────────────────────────────
+async function analyzeWithAI(id){
+  const btn = document.getElementById("ai-btn-"+id);
+  const box = document.getElementById("ai-box-"+id);
+  if(!btn||!box) return;
+  btn.disabled=true; btn.textContent=t("ai_analyzing");
+  box.className="ai-comment visible";
+  box.innerHTML=`<span style="color:var(--text3);font-style:italic">Yapay zeka inceliyor...</span>`;
+  try{
+    const res = await fetch(API+"/chart/"+id);
+    const d   = await res.json();
+    const tot = (d.chart_active||0)+(d.chart_rest||0)+(d.chart_meal||0)+(d.chart_sleep||8);
+    const pct = v => tot>0 ? Math.round((v/tot)*100) : 0;
+    const prompt = lang==="en"
+      ? `Person: ${d.name}, Age context. Sleep score: ${d.sleep_score}/10. Steps: ${d.steps}, Active: ${d.active_mins} min, Calories: ${Math.round(d.calories)} kcal, Screen time: ${d.screen_mins} min. Heart rate: ${d.heart_rate} bpm, SpO₂: ${d.spo2}%, Skin temp: ${d.skin_temp}°C, HRV: ${d.hrv}, Stress score: ${d.stress_level}/100. Activity distribution: Active ${pct(d.chart_active)}%, Rest ${pct(d.chart_rest)}%, Meal ${pct(d.chart_meal)}%, Sleep ${pct(d.chart_sleep)}%. Mood: ${d.mood}. Write a brief 3-4 sentence health & lifestyle analysis. Note strengths and concerns.`
+      : `Kişi: ${d.name}. Uyku skoru: ${d.sleep_score}/10. Adım: ${d.steps}, Aktif: ${d.active_mins} dk, Kalori: ${Math.round(d.calories)} kcal, Ekran: ${d.screen_mins} dk. Nabız: ${d.heart_rate} bpm, SpO₂: ${d.spo2}%, Cilt sıcaklığı: ${d.skin_temp}°C, HRV: ${d.hrv}, Stres: ${d.stress_level}/100. Aktivite dağılımı: Aktif %${pct(d.chart_active)}, Dinlenme %${pct(d.chart_rest)}, Yemek %${pct(d.chart_meal)}, Uyku %${pct(d.chart_sleep)}. Ruh hali: ${d.mood}. Bu biyometrik ve aktivite verilerine göre kişinin genel sağlık ve yaşam kalitesi hakkında 3-4 cümlelik Türkçe yorum yap. Güçlü ve zayıf yönleri belirt.`;
+    const aiRes = await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,
+        messages:[{role:"user",content:prompt}]})});
+    const aiData = await aiRes.json();
+    const text = (aiData.content||[]).map(b=>b.text||"").join("")||"Yorum alınamadı.";
+    box.innerHTML=`🤖 <strong>AI:</strong> ${text}`;
+  }catch(e){
+    box.innerHTML=`<span style="color:var(--red)">Bağlantı hatası.</span>`;
+  }
+  btn.textContent=t("ai_again"); btn.disabled=false;
+}
+
+// ── CANLI GRAFİK (büyük) ────────────────────────────────────────────────────
+const liveData = {};
+let liveChart  = null;
+function initLiveChart(){
+  const sel    = document.getElementById("live-person-select");
+  const metric = document.getElementById("live-metric-select").value;
+  const pid    = parseInt(sel.value);
+  if(!pid) return;
+  if(!liveData[pid]) liveData[pid]={steps:[],calories:[],active_mins:[],heart_rate:[],spo2:[],stress_level:[],hrv:[]};
+  const canvas = document.getElementById("liveLineChart");
+  if(liveChart){ liveChart.destroy(); liveChart=null; }
+  const metricColors = {steps:"#534AB7",calories:"#EF9F27",active_mins:"#1d9e75",
+    heart_rate:"#e24b4a",spo2:"#378add",stress_level:"#e260a0",hrv:"#5DCAA5"};
+  const col = metricColors[metric]||"#534AB7";
+  liveChart = new Chart(canvas.getContext("2d"),{
+    type:"line",
+    data:{labels:Array(60).fill(""),
+      datasets:[{data:Array(60).fill(null),
+        borderColor:col,backgroundColor:col+"14",
+        borderWidth:2,pointRadius:0,tension:0.4,fill:true}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{x:{display:false},
+        y:{ticks:{color:"#888",font:{size:11}},grid:{color:"rgba(128,128,128,0.1)"}}},
+      animation:{duration:200}}
+  });
+}
+function updateLiveChart(){
+  const sel    = document.getElementById("live-person-select");
+  const metric = document.getElementById("live-metric-select").value;
+  const pid    = parseInt(sel.value);
+  if(!pid||!liveChart) return;
+  const p = st.persons[pid]; if(!p) return;
+  if(!liveData[pid]) liveData[pid]={steps:[],calories:[],active_mins:[],heart_rate:[],spo2:[],stress_level:[],hrv:[]};
+  const arr = liveData[pid][metric]||[];
+  arr.push(p[metric]||0);
+  if(arr.length>60) arr.shift();
+  liveChart.data.datasets[0].data=[...arr];
+  liveChart.update("none");
+}
+
+// ── HARİTA ──────────────────────────────────────────────────────────────────
+let leafletMap = null;
+const mapMarkers = {};
+function initMap(){
+  leafletMap = L.map("leaflet-map").setView([41.020, 28.980], 13);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    attribution:"© OpenStreetMap contributors", maxZoom:18}).addTo(leafletMap);
+}
+function updateMap(locations){
+  if(!leafletMap) return;
+  locations.forEach(loc=>{
+    const lat = loc.latitude, lng = loc.longitude;
+    if(!lat||!lng) return;
+    const color = loc.avatar_color||"#534AB7";
+    const icon  = L.divIcon({
+      html:`<div style="background:${color};width:28px;height:28px;border-radius:50%;
+        border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);
+        display:flex;align-items:center;justify-content:center;
+        font-size:12px;cursor:pointer;" title="${loc.name}">
+        ${loc.activity_icon||"📍"}</div>`,
+      className:"",iconSize:[28,28],iconAnchor:[14,14]});
+    if(mapMarkers[loc.id]){
+      mapMarkers[loc.id].setLatLng([lat,lng]);
+      mapMarkers[loc.id].setIcon(icon);
+    } else {
+      mapMarkers[loc.id] = L.marker([lat,lng],{icon}).addTo(leafletMap)
+        .bindPopup(`<strong>${loc.name}</strong><br>${loc.activity_icon} ${loc.activity_name}`);
+    }
+  });
+}
+
+// ── KARŞILAŞTIRMA ────────────────────────────────────────────────────────────
+function renderCompare(data){
+  document.getElementById("compare-tbody").innerHTML = !data.length
+    ? `<tr><td colspan="11" class="empty-state">${t("no_person")}</td></tr>`
+    : data.map((p,i)=>{
+        const hrCls = p.heart_rate>130||p.heart_rate<55?"danger":p.heart_rate>110||p.heart_rate<60?"warn":"";
+        const spoCls = p.spo2<93?"low":p.spo2<96?"warn":"";
+        const strCls = p.stress_level>75?"high":p.stress_level>50?"med":"";
+        return `<tr>
+          <td>${i+1}</td>
+          <td><strong>${p.name}</strong></td>
+          <td>${p.city||"—"}</td>
+          <td>${(p.steps||0).toLocaleString()}</td>
+          <td>${Math.round(p.calories||0)}</td>
+          <td>${p.active_mins||0}</td>
+          <td class="td-hr ${hrCls}">${p.heart_rate||"—"} bpm</td>
+          <td class="td-spo2 ${spoCls}">${p.spo2||"—"}%</td>
+          <td class="td-stress ${strCls}">${p.stress_level||"—"}</td>
+          <td>${p.hrv||"—"}</td>
+          <td>${p.sleep_score||"—"}/10</td>
+        </tr>`; }).join("");
+}
+
+// ── ANOMALİ ──────────────────────────────────────────────────────────────────
+function renderAnomalies(data){
+  document.getElementById("anomaly-list").innerHTML = !data.length
+    ? `<div class="empty-state">${t("no_anomaly")}</div>`
+    : data.map(a=>{
+        const ti  = new Date(a.detected_at).toLocaleTimeString(lang==="tr"?"tr-TR":"en-US",{hour:"2-digit",minute:"2-digit"});
+        const msg = lang==="en"&&a.message_en ? a.message_en : a.message_tr;
+        const sev = a.severity||"info";
+        const sevLbl = sev==="critical"?t("critical_lbl"):sev==="warning"?t("warn"):t("info_lbl");
+        return `<div class="anomaly-item">
+          <span class="anm-badge sev-${sev}">${sevLbl}</span>
+          <span class="anm-person">${a.person_name}</span>
+          <span class="anm-msg">${msg} <span style="color:var(--text3)">(${a.value})</span></span>
+          <span class="anm-time">${ti}</span>
+        </div>`;}).join("");
+}
+
+// ── ÖZET BAR ─────────────────────────────────────────────────────────────────
+function renderSummary(s){
+  document.getElementById("s-total").textContent   = s.total_persons;
+  document.getElementById("s-steps").textContent   = (s.avg_steps||0).toLocaleString();
+  document.getElementById("s-cal").textContent     = Math.round(s.avg_calories||0);
+  document.getElementById("s-active").textContent  = s.avg_active_mins||0;
+  document.getElementById("s-hr").textContent      = Math.round(s.avg_heart_rate||0);
+  document.getElementById("s-stress").textContent  = Math.round(s.avg_stress||0);
+  document.getElementById("s-anomaly").textContent = s.anomaly_count||0;
+  if(s.weather){
+    const w = s.weather;
+    const wt = lang==="en"?w.condition_en:w.condition;
+    document.getElementById("weather-text").textContent = `${w.icon} ${wt} ${w.temp}°C`;
+  }
+  // Akıllı uyarı badge (header'da göster)
+  const cnt = s.smart_alert_count||0;
+  const btn = document.getElementById("tab-btn-alerts");
+  if(btn) btn.textContent = cnt>0 ? `🔔 Akıllı Uyarılar (${cnt})` : "🔔 Akıllı Uyarılar";
+}
+
+// ── SELECT GÜNCELLEME ────────────────────────────────────────────────────────
+function syncPersonSelects(persons){
+  ["live-person-select","weekly-person-select","analysis-person-select","timeline-person-select"].forEach(selId=>{
+    const sel = document.getElementById(selId); if(!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = persons.map(p=>`<option value="${p.id}">${p.name}</option>`).join("");
+    if(prev && persons.find(p=>String(p.id)===prev)) sel.value=prev;
+  });
+}
+
+// ── HAFTALIK RAPOR ────────────────────────────────────────────────────────────
+let weeklyChart = null, weeklyData = null;
+async function loadWeekly(){
+  const sel = document.getElementById("weekly-person-select");
+  const pid = parseInt(sel.value); if(!pid) return;
+  const res = await fetch(API+"/weekly/"+pid);
+  weeklyData = await res.json();
+  const days = weeklyData.days||[];
+  const canvas = document.getElementById("weeklyChart");
+  if(weeklyChart){ weeklyChart.destroy(); weeklyChart=null; }
+  weeklyChart = new Chart(canvas.getContext("2d"),{
+    type:"bar",
+    data:{
+      labels:days.map(d=>d.date),
+      datasets:[
+        {label:t("active"), data:days.map(d=>d.active_events||0), backgroundColor:"#534AB7"},
+        {label:t("meal"),   data:days.map(d=>d.meal_events||0),   backgroundColor:"#EF9F27"},
+        {label:t("sleep_l"),data:days.map(d=>d.sleep_events||0),  backgroundColor:"#85B7EB"},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:10},color:"#888"}}},
+      scales:{x:{stacked:true,ticks:{color:"#888"}},
+        y:{stacked:true,ticks:{color:"#888"},grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+  document.getElementById("weekly-table").innerHTML=`
+    <table style="margin-top:10px">
+      <thead><tr>
+        <th>${t("day")}</th><th>${t("active")}</th><th>${t("meal")}</th>
+        <th>${t("sleep_l")}</th><th>${t("steps")}</th><th>${t("avg_hr")}</th>
+      </tr></thead>
+      <tbody>${days.map(d=>`<tr>
+        <td>${d.date}</td><td>${d.active_events||0}</td><td>${d.meal_events||0}</td>
+        <td>${d.sleep_events||0}</td><td>${(d.max_steps||0).toLocaleString()}</td>
+        <td>${d.avg_hr?Math.round(d.avg_hr)+" bpm":"—"}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+}
+
+// ── PDF ───────────────────────────────────────────────────────────────────────
+async function downloadPDF(){
+  if(!weeklyData){ showToast("Önce bir kişi seçin","warn"); return; }
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF();
+  const p   = weeklyData.person;
+  doc.setFontSize(16); doc.setTextColor(83,74,183);
+  doc.text("Aktivite Simülasyonu v3 — Haftalık Sağlık Raporu", 14, 18);
+  doc.setFontSize(11); doc.setTextColor(60,60,80);
+  doc.text(`Kişi: ${p.name||"—"}   Uyku Skoru: ${p.sleep_score||"—"}/10`, 14, 28);
+  doc.text(`Rapor tarihi: ${new Date().toLocaleDateString("tr-TR")}`, 14, 35);
+  doc.setDrawColor(220,220,230); doc.line(14,39,196,39);
+  doc.setFontSize(10); doc.setTextColor(100,100,120);
+  ["Gün","Aktif","Yemek","Uyku","Maks Adım","Ort. Nabız"].forEach((h,i)=>
+    doc.text(h, 14+i*32, 47));
+  doc.setTextColor(30,30,50);
+  (weeklyData.days||[]).forEach((d,i)=>{
+    const y = 55+i*8;
+    [d.date||"",String(d.active_events||0),String(d.meal_events||0),
+     String(d.sleep_events||0),(d.max_steps||0).toLocaleString(),
+     d.avg_hr?Math.round(d.avg_hr)+"":"—"].forEach((v,j)=>
+      doc.text(v, 14+j*32, y));
+  });
+  doc.save(`rapor_${(p.name||"kisi").replace(/ /g,"_")}.pdf`);
+  showToast("PDF indirildi","ok");
+}
+
+// ── KİŞİ EKLE/SİL ────────────────────────────────────────────────────────────
+async function addPerson(){
+  const name = document.getElementById("f-name").value.trim();
+  const age  = parseInt(document.getElementById("f-age").value)||null;
+  const city = document.getElementById("f-city").value.trim();
+  if(!name){ showToast(t("name")+" zorunlu","err"); return; }
+  const res = await fetch(API+"/persons",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name,age,city,avatar_color:selectedColor})});
+  if(res.ok){
+    ["f-name","f-age","f-city"].forEach(id=>document.getElementById(id).value="");
+    showToast(name+" eklendi","ok");
+  }
+}
+async function deletePerson(id,name){
+  if(!confirm(name+" kişisini silmek istiyor musun?")) return;
+  await fetch(API+"/persons/"+id,{method:"DELETE"});
+  showToast(name+" silindi","ok");
+}
+async function changeAvatarColor(pid){
+  const colors = ["#CECBF6","#9FE1CB","#F5C4B3","#F4C0D1","#B5D4F4","#C0DD97","#FAC775","#F7C1C1"];
+  const cur    = st.persons[pid]?.avatar_color||colors[0];
+  const idx    = colors.indexOf(cur);
+  const next   = colors[(idx+1)%colors.length];
+  await fetch(API+"/persons/"+pid,{method:"PATCH",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({avatar_color:next})});
+  const el = document.querySelector(`#card-${pid} .avatar`);
+  if(el) el.style.background=next;
+}
+
+// ── FORM FOCUS KONTROLÜ ──────────────────────────────────────────────────────
+let formFocused = false;
+document.addEventListener("focusin",  e => { if(e.target.tagName==="INPUT") formFocused=true;  });
+document.addEventListener("focusout", e => { if(e.target.tagName==="INPUT") formFocused=false; });
+
+// ── ANA DÖNGÜ ─────────────────────────────────────────────────────────────────
+async function fetchAll(){
+  if(fetching || formFocused) return; fetching=true;
+  try{
+    const [sr,cr,ar,smr,lr] = await Promise.all([
+      fetch(API+"/state"), fetch(API+"/compare"),
+      fetch(API+"/anomalies"), fetch(API+"/summary"),
+      fetch(API+"/location")]);
+    const [states,compare,anomalies,summary,locations] = await Promise.all([
+      sr.json(),cr.json(),ar.json(),smr.json(),lr.json()]);
+
+    applyStates(states);
+    syncPersonSelects(states);
+    // Her 20 fetchAll'da bir (her ~60 sn) trend güncelle
+    if(typeof fetchCount === "undefined") window.fetchCount = 0;
+    window.fetchCount++;
+    if(window.fetchCount % 20 === 0){
+      Object.keys(st.persons).forEach(pid=>loadPersonTrend(parseInt(pid)));
+    }
+    renderCompare(compare);
+    renderAnomalies(anomalies);
+    renderSummary(summary);
+    updateLiveChart();
+    updateMap(locations);
+
+    // Anomali toast bildirimi
+    anomalies.forEach(a=>{
+      if(!seenAnomalies.has(a.id)){
+        seenAnomalies.add(a.id);
+        const msg = lang==="en"&&a.message_en?a.message_en:a.message_tr;
+        const type = a.severity==="critical"?"critical":"warn";
+        showToast(`${t("notif_anomaly")} ${a.person_name} — ${msg}`, type, 4500, a.person_name);
+      }
+    });
+  }catch(e){
+    const grid = document.getElementById("persons-grid");
+    if(!Object.keys(st.persons).length)
+      grid.innerHTML=`<div class="empty-state" style="color:var(--red)">
+        Sunucuya bağlanılamıyor.<br><strong>python app.py</strong> çalışıyor mu?</div>`;
+  }
+  fetching=false;
+}
+
+
+// ── AKILLI UYARILAR ──────────────────────────────────────────────────────────
+async function loadSmartAlerts(){
+  const el = document.getElementById("alerts-list");
+  if(!el) return;
+  el.innerHTML = "<div class='empty-state'>Yükleniyor...</div>";
+  try{
+    const res  = await fetch(API+"/smart_alerts");
+    const data = await res.json();
+    if(!data.length){
+      el.innerHTML = "<div class='empty-state'>Henüz akıllı uyarı yok.</div>"; return;
+    }
+    const icons = {
+      no_exercise_3d: "🏃",
+      irregular_sleep: "🌙",
+      sleep_debt: "😴",
+      high_stress_trend: "🧠"
+    };
+    const severityClass = {warning:"sev-warning", info:"sev-info", critical:"sev-critical"};
+    el.innerHTML = data.map(a=>{
+      const ti  = new Date(a.detected_at).toLocaleString(lang==="tr"?"tr-TR":"en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+      const msg = a.message_tr;
+      const sev = a.severity||"info";
+      const ic  = icons[a.alert_type]||"⚠️";
+      return `<div class="anomaly-item">
+        <span style="font-size:18px">${ic}</span>
+        <span class="anm-badge ${severityClass[sev]||'sev-info'}">${sev==="warning"?"UYARI":sev==="critical"?"KRİTİK":"BİLGİ"}</span>
+        <span class="anm-person">${a.person_name}</span>
+        <span class="anm-msg">${msg}</span>
+        <span class="anm-time">${ti}</span>
+      </div>`;
+    }).join("");
+  }catch(e){
+    el.innerHTML = "<div class='empty-state' style='color:var(--red)'>Yüklenemedi.</div>";
+  }
+}
+
+// ── ANALİZ ───────────────────────────────────────────────────────────────────
+const analysisCharts = {};
+
+function destroyAnalysisCharts(){
+  Object.values(analysisCharts).forEach(ch=>{ try{ ch.destroy(); }catch(e){} });
+  Object.keys(analysisCharts).forEach(k=>delete analysisCharts[k]);
+}
+
+async function loadAnalysis(){
+  const sel  = document.getElementById("analysis-person-select");
+  const dsel = document.getElementById("analysis-days-select");
+  const pid  = parseInt(sel.value);
+  if(!pid) return;
+  const days = dsel.value || 14;
+  document.getElementById("analysis-loading").style.display="inline";
+  document.getElementById("analysis-content").innerHTML="";
+  destroyAnalysisCharts();
+  try{
+    const res  = await fetch(API+"/analysis/"+pid+"?days="+days);
+    const data = await res.json();
+    if(data.error){ document.getElementById("analysis-content").innerHTML=`<div class="empty-state">${data.error}</div>`; return; }
+    renderAnalysis(data);
+  }catch(e){
+    document.getElementById("analysis-content").innerHTML=`<div class="empty-state" style="color:var(--red)">Veri yüklenemedi.</div>`;
+  }
+  document.getElementById("analysis-loading").style.display="none";
+}
+
+function scoreColor(v){
+  if(v>=75) return "#1d9e75";
+  if(v>=50) return "#ef9f27";
+  return "#e24b4a";
+}
+
+function renderAnalysis(data){
+  window.lastAnalysisData = data;  // PDF için sakla
+  const p    = data.person;
+  const days = data.days;
+  const el   = document.getElementById("analysis-content");
+  const activeDays = days.filter(d=>d.total_events>0||d.avg_hr>0);
+  const labels = activeDays.map(d=>d.label+" "+d.weekday);
+
+  const card = "background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:14px;box-shadow:var(--shadow);";
+  const grid2 = "display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;";
+
+  // Korelasyon ve trend verileri
+  const correlations = data.correlations || [];
+  const trends       = data.trends       || {};
+  const bestDay      = data.best_day;
+  const worstDay     = data.worst_day;
+
+  // Özet kartlar
+  const avgHealth = activeDays.length ? Math.round(activeDays.reduce((s,d)=>s+(d.health_score||0),0)/activeDays.length) : 0;
+  const avgSleep  = activeDays.length ? Math.round(activeDays.reduce((s,d)=>s+(d.sleep_mins||0),0)/activeDays.length) : 0;
+  const avgSteps  = activeDays.length ? Math.round(activeDays.reduce((s,d)=>s+(d.steps||0),0)/activeDays.length) : 0;
+  const irreg     = data.sleep_irregularity||0;
+
+  let html = `
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+    <div style="${card}margin-bottom:0;text-align:center">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Ort. Sağlık Skoru</div>
+      <div style="font-size:28px;font-weight:800;color:${scoreColor(avgHealth)}">${avgHealth}</div>
+      <div style="font-size:10px;color:var(--text3)">/100</div>
+    </div>
+    <div style="${card}margin-bottom:0;text-align:center">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Ort. Uyku</div>
+      <div style="font-size:28px;font-weight:800;color:#85B7EB">${Math.floor(avgSleep/60)}s${avgSleep%60}dk</div>
+      <div style="font-size:10px;color:var(--text3)">günlük ortalama</div>
+    </div>
+    <div style="${card}margin-bottom:0;text-align:center">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Ort. Adım</div>
+      <div style="font-size:28px;font-weight:800;color:#534AB7">${avgSteps.toLocaleString("tr-TR")}</div>
+      <div style="font-size:10px;color:var(--text3)">günlük ortalama</div>
+    </div>
+    <div style="${card}margin-bottom:0;text-align:center">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Uyku Düzensizliği</div>
+      <div style="font-size:28px;font-weight:800;color:${irreg>=3?'#e24b4a':irreg>=1.5?'#ef9f27':'#1d9e75'}">${irreg}s</div>
+      <div style="font-size:10px;color:var(--text3)">uyanış saati farkı</div>
+    </div>
+  </div>`;
+
+  // Akıllı uyarılar özeti
+  if(data.smart_alerts && data.smart_alerts.length){
+    html += `<div style="${card}border-left:3px solid var(--amber)">
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px">🔔 Bu kişiye ait akıllı uyarılar</div>
+      ${data.smart_alerts.slice(0,4).map(a=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px">
+          <span class="anm-badge sev-${a.severity||'info'}">${a.severity==="warning"?"UYARI":"BİLGİ"}</span>
+          <span style="color:var(--text2);flex:1">${a.message_tr}</span>
+          <span style="color:var(--text3);font-size:10px">${new Date(a.detected_at).toLocaleDateString("tr-TR")}</span>
+        </div>`).join("")}
+    </div>`;
+  }
+
+  // Trend okları özet
+  const trendIcon = {up:"↑",down:"↓",stable:"→"};
+  const trendCls  = {up:"trend-up",down:"trend-down",stable:"trend-stable"};
+
+  // Trend grid - iç içe backtick olmadan
+  const trendItems = [
+    ["🚶","Adım","steps",false],["⏱","Aktif dk","active_mins",false],
+    ["😴","Uyku","sleep_mins",false],["🧠","Stres","avg_stress",true],["❤️","Nabız","avg_hr",false]
+  ];
+  let trendGrid = "";
+  trendItems.forEach(function(item){
+    const icon=item[0], label=item[1], key=item[2], invert=item[3];
+    const dir = trends[key]||"stable";
+    const cls = invert
+      ? (dir==="up"?"trend-down":dir==="down"?"trend-up":"trend-stable")
+      : (trendCls[dir]||"trend-stable");
+    trendGrid += '<div style="background:var(--surface2);border-radius:8px;padding:8px 4px">'
+      + '<div style="font-size:16px">'+icon+'</div>'
+      + '<div style="font-size:11px;color:var(--text2);margin:2px 0">'+label+'</div>'
+      + '<div class="'+cls+'" style="font-size:18px">'+(trendIcon[dir]||"→")+'</div>'
+      + '</div>';
+  });
+  html += '<div style="'+card+'">'
+    + '<div style="font-size:12px;font-weight:700;margin-bottom:10px">📈 7 Günlük Trend Özeti</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;text-align:center">'
+    + trendGrid
+    + '</div></div>';
+
+  // En iyi / en kötü gün
+  if(bestDay || worstDay){
+    function dayDetail(d, color){
+      if(!d) return "<div style='color:var(--text3)'>Yeterli veri yok</div>";
+      return '<div style="font-size:22px;font-weight:800;color:'+color+'">'+d.label+' '+d.weekday+'</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:4px">'
+        + 'Sağlık skoru: <strong>'+d.health_score+'</strong>/100<br>'
+        + 'Uyku: '+Math.floor((d.sleep_mins||0)/60)+'s '+((d.sleep_mins||0)%60)+'dk &bull; '
+        + 'Adım: '+(d.steps||0).toLocaleString("tr-TR")+'<br>'
+        + 'Aktif: '+(d.active_mins||0)+' dk &bull; Stres: '+Math.round(d.avg_stress||0)
+        + '</div>';
+    }
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">'
+      + '<div style="'+card+'margin-bottom:0;border-left:3px solid #1d9e75">'
+      + '<div style="font-size:12px;font-weight:700;margin-bottom:8px">🏆 En İyi Gün</div>'
+      + dayDetail(bestDay,"#1d9e75")
+      + '</div>'
+      + '<div style="'+card+'margin-bottom:0;border-left:3px solid #e24b4a">'
+      + '<div style="font-size:12px;font-weight:700;margin-bottom:8px">📉 En Kötü Gün</div>'
+      + dayDetail(worstDay,"#e24b4a")
+      + '</div></div>';
+  }
+
+  // Korelasyon analizi
+  if(correlations.length){
+    let corrHtml = '<div style="'+card+'">'
+      + '<div style="font-size:12px;font-weight:700;margin-bottom:10px">🔗 Korelasyon Analizi</div>';
+    correlations.forEach(function(c){
+      const bg  = c.strength==="güçlü" ? "#1d9e7520" : "var(--surface2)";
+      const col = c.strength==="güçlü" ? "#1d9e75"   : "var(--text3)";
+      const lbl = c.strength==="güçlü" ? "✓ Güçlü ilişki" : "~ Zayıf ilişki";
+      corrHtml += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">'
+        + '<span style="font-size:20px">'+c.icon+'</span>'
+        + '<div>'
+        + '<div style="font-size:11px;font-weight:700;color:var(--text)">'+c.title+'</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+c.desc+'</div>'
+        + '<span style="font-size:9px;padding:2px 6px;border-radius:4px;margin-top:4px;display:inline-block;background:'+bg+';color:'+col+'">'+lbl+'</span>'
+        + '</div></div>';
+    });
+    corrHtml += '</div>';
+    html += corrHtml;
+  }
+
+  // Sağlık skoru
+  html += `<div style="${card}">
+    <div style="font-size:12px;font-weight:700;margin-bottom:10px">💚 Günlük Sağlık Skoru</div>
+    <div style="position:relative;height:160px"><canvas id="ac-health"></canvas></div>
+  </div>`;
+
+  // Uyku düzeni + tablo
+  html += `<div style="${card}">
+    <div style="font-size:12px;font-weight:700;margin-bottom:10px">😴 Uyku Düzeni</div>
+    <div style="position:relative;height:160px"><canvas id="ac-sleep"></canvas></div>
+    <div style="margin-top:10px;overflow-x:auto">
+      <table style="min-width:480px;font-size:11px">
+        <thead><tr><th>Tarih</th><th>Uyku Başlangıç</th><th>Uyanış</th><th>Süre</th></tr></thead>
+        <tbody>${activeDays.map(d=>`<tr>
+          <td>${d.label} ${d.weekday}</td>
+          <td>${d.sleep_start_time||"—"}</td>
+          <td>${d.wake_time||"—"}</td>
+          <td style="color:${(d.sleep_mins||0)>=420?'#1d9e75':(d.sleep_mins||0)>=300?'#ef9f27':'#e24b4a'}">${d.sleep_mins?Math.floor(d.sleep_mins/60)+"s "+d.sleep_mins%60+"dk":"—"}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>
+  </div>`;
+
+  // Nabız trendi
+  html += `<div style="${card}">
+    <div style="font-size:12px;font-weight:700;margin-bottom:10px">❤️ Nabız Trendi (Min/Ort/Maks)</div>
+    <div style="position:relative;height:160px"><canvas id="ac-hr"></canvas></div>
+  </div>`;
+
+  // Adım + Kalori
+  html += `<div style="${grid2}">
+    <div style="${card}margin-bottom:0"><div style="font-size:12px;font-weight:700;margin-bottom:10px">🚶 Günlük Adım</div>
+      <div style="position:relative;height:140px"><canvas id="ac-steps"></canvas></div></div>
+    <div style="${card}margin-bottom:0"><div style="font-size:12px;font-weight:700;margin-bottom:10px">🔥 Kalori</div>
+      <div style="position:relative;height:140px"><canvas id="ac-cal"></canvas></div></div>
+  </div>`;
+
+  // Stres + SpO2
+  html += `<div style="${grid2}">
+    <div style="${card}margin-bottom:0"><div style="font-size:12px;font-weight:700;margin-bottom:10px">🧠 Stres Skoru</div>
+      <div style="position:relative;height:140px"><canvas id="ac-stress"></canvas></div></div>
+    <div style="${card}margin-bottom:0"><div style="font-size:12px;font-weight:700;margin-bottom:10px">🫁 SpO₂</div>
+      <div style="position:relative;height:140px"><canvas id="ac-spo2"></canvas></div></div>
+  </div>`;
+
+  // Aktif süre
+  html += `<div style="${card}">
+    <div style="font-size:12px;font-weight:700;margin-bottom:10px">⏱ Aktif Süre (dk)</div>
+    <div style="position:relative;height:140px"><canvas id="ac-active"></canvas></div>
+  </div>`;
+
+  // Aktivite dağılımı
+  html += `<div style="${card}">
+    <div style="font-size:12px;font-weight:700;margin-bottom:10px">📊 Aktivite Dağılımı (Gün Gün)</div>
+    <div style="position:relative;height:180px"><canvas id="ac-dist"></canvas></div>
+  </div>`;
+
+  // Isı haritası
+  html += `<div style="${card}">
+    <div style="font-size:12px;font-weight:700;margin-bottom:10px">🌡 Günlük Aktivite Isı Haritası (saat × gün)</div>
+    <div id="ac-heatmap" style="overflow-x:auto"></div>
+  </div>`;
+
+  el.innerHTML = html;
+
+  // ── GRAFİKLER ──
+
+  // Sağlık skoru
+  const healthVals = activeDays.map(d=>d.health_score||0);
+  analysisCharts["health"] = new Chart(document.getElementById("ac-health").getContext("2d"),{
+    type:"line",
+    data:{labels,datasets:[{label:"Sağlık Skoru",data:healthVals,
+      borderColor:"#1d9e75",backgroundColor:"rgba(29,158,117,0.1)",
+      borderWidth:2,pointRadius:4,tension:0.4,fill:true,
+      pointBackgroundColor:healthVals.map(v=>scoreColor(v))}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:"#888",font:{size:9}}},
+        y:{min:0,max:100,ticks:{color:"#888",font:{size:9}},grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+
+  // Radar grafiği
+  const radarLabels = ["Uyku","Aktif","Düşük Stres","SpO₂","Nabız Sağlığı"];
+  const avgSleepScore  = Math.min(100, Math.round((activeDays.reduce((s,d)=>s+(d.sleep_mins||0),0)/activeDays.length)/480*100));
+  const avgActiveScore = Math.min(100, Math.round((activeDays.reduce((s,d)=>s+(d.active_mins||0),0)/activeDays.length)/60*100));
+  const avgStressInv   = Math.round(100 - (activeDays.reduce((s,d)=>s+(d.avg_stress||50),0)/activeDays.length));
+  const avgSpo2Score   = Math.min(100, Math.round(((activeDays.reduce((s,d)=>s+(d.avg_spo2||97),0)/activeDays.length)-88)/12*100));
+  const avgHrScore     = Math.round(Math.max(0,100-Math.abs((activeDays.reduce((s,d)=>s+(d.avg_hr||75),0)/activeDays.length)-75)*2));
+
+  if(document.getElementById("ac-radar")){
+    analysisCharts["radar"] = new Chart(document.getElementById("ac-radar").getContext("2d"),{
+      type:"radar",
+      data:{labels:radarLabels,datasets:[{
+        label:"Sağlık Profili",
+        data:[avgSleepScore,avgActiveScore,avgStressInv,avgSpo2Score,avgHrScore],
+        backgroundColor:"rgba(83,74,183,0.15)",
+        borderColor:"#534AB7",borderWidth:2,
+        pointBackgroundColor:"#534AB7",pointRadius:4,
+      }]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{r:{min:0,max:100,ticks:{display:false},
+          grid:{color:"rgba(128,128,128,0.15)"},
+          pointLabels:{color:"var(--text2)",font:{size:10}}}}}
+    });
+  }
+
+  // Uyku
+  const sleepMins = activeDays.map(d=>d.sleep_mins||0);
+  analysisCharts["sleep"] = new Chart(document.getElementById("ac-sleep").getContext("2d"),{
+    type:"bar",
+    data:{labels,datasets:[{label:"Uyku (dk)",data:sleepMins,
+      backgroundColor:sleepMins.map(v=>v>=420?"#85B7EB":v>=300?"#ef9f27":"#e24b4a"),
+      borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:"#888",font:{size:9}}},
+        y:{ticks:{color:"#888",font:{size:9},callback:v=>Math.floor(v/60)+"s"},
+          grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+
+  // Nabız
+  analysisCharts["hr"] = new Chart(document.getElementById("ac-hr").getContext("2d"),{
+    type:"line",
+    data:{labels,datasets:[
+      {label:"Maks",data:activeDays.map(d=>d.max_hr||0),borderColor:"#e24b4a",borderWidth:1.5,pointRadius:2,tension:0.4,fill:false},
+      {label:"Ort", data:activeDays.map(d=>Math.round(d.avg_hr)||0),borderColor:"#534AB7",backgroundColor:"rgba(83,74,183,0.08)",borderWidth:2,pointRadius:3,tension:0.4,fill:"-1"},
+      {label:"Min", data:activeDays.map(d=>d.min_hr||0),borderColor:"#1d9e75",borderWidth:1.5,pointRadius:2,tension:0.4,fill:false},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:9},color:"#888"}}},
+      scales:{x:{ticks:{color:"#888",font:{size:9}}},y:{ticks:{color:"#888",font:{size:9}},grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+
+  // Adım
+  analysisCharts["steps"] = new Chart(document.getElementById("ac-steps").getContext("2d"),{
+    type:"bar",
+    data:{labels,datasets:[{label:"Adım",data:activeDays.map(d=>d.steps||0),backgroundColor:"#534AB7",borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:"#888",font:{size:9}}},y:{ticks:{color:"#888",font:{size:9}},grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+
+  // Kalori
+  analysisCharts["cal"] = new Chart(document.getElementById("ac-cal").getContext("2d"),{
+    type:"line",
+    data:{labels,datasets:[{label:"Kalori",data:activeDays.map(d=>Math.round(d.calories)||0),
+      borderColor:"#EF9F27",backgroundColor:"rgba(239,159,39,0.1)",borderWidth:2,pointRadius:2,tension:0.4,fill:true}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:"#888",font:{size:9}}},y:{ticks:{color:"#888",font:{size:9}},grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+
+  // Stres
+  const stressVals = activeDays.map(d=>Math.round(d.avg_stress)||0);
+  analysisCharts["stress"] = new Chart(document.getElementById("ac-stress").getContext("2d"),{
+    type:"line",
+    data:{labels,datasets:[{label:"Stres",data:stressVals,
+      borderColor:"#e260a0",backgroundColor:"rgba(226,96,160,0.1)",borderWidth:2,pointRadius:3,tension:0.4,fill:true,
+      pointBackgroundColor:stressVals.map(v=>v>75?"#e24b4a":v>50?"#ef9f27":"#1d9e75")}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:"#888",font:{size:9}}},y:{min:0,max:100,ticks:{color:"#888",font:{size:9}},grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+
+  // SpO2
+  const spo2Vals = activeDays.map(d=>d.avg_spo2||0);
+  analysisCharts["spo2"] = new Chart(document.getElementById("ac-spo2").getContext("2d"),{
+    type:"line",
+    data:{labels,datasets:[{label:"SpO₂",data:spo2Vals,
+      borderColor:"#378add",backgroundColor:"rgba(55,138,221,0.1)",borderWidth:2,pointRadius:3,tension:0.4,fill:true,
+      pointBackgroundColor:spo2Vals.map(v=>v>0&&v<93?"#e24b4a":v>0&&v<96?"#ef9f27":"#1d9e75")}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:"#888",font:{size:9}}},y:{min:88,max:100,ticks:{color:"#888",font:{size:9}},grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+
+  // Aktif süre
+  analysisCharts["active"] = new Chart(document.getElementById("ac-active").getContext("2d"),{
+    type:"bar",
+    data:{labels,datasets:[{label:"Aktif dk",data:activeDays.map(d=>d.active_mins||0),
+      backgroundColor:activeDays.map(d=>(d.active_mins||0)>=30?"#1d9e75":"#ef9f27"),borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:"#888",font:{size:9}}},y:{ticks:{color:"#888",font:{size:9}},grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+
+  // Aktivite dağılımı
+  analysisCharts["dist"] = new Chart(document.getElementById("ac-dist").getContext("2d"),{
+    type:"bar",
+    data:{labels,datasets:[
+      {label:"Aktif",   data:activeDays.map(d=>d.active_count||0),backgroundColor:"#534AB7",stack:"s"},
+      {label:"Dinlenme",data:activeDays.map(d=>d.rest_count||0),  backgroundColor:"#5DCAA5",stack:"s"},
+      {label:"Yemek",   data:activeDays.map(d=>d.meal_count||0),  backgroundColor:"#EF9F27",stack:"s"},
+      {label:"Uyku",    data:activeDays.map(d=>d.sleep_count||0), backgroundColor:"#85B7EB",stack:"s"},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"bottom",labels:{font:{size:9},color:"#888"}}},
+      scales:{x:{stacked:true,ticks:{color:"#888",font:{size:9}}},y:{stacked:true,ticks:{color:"#888",font:{size:9}},grid:{color:"rgba(128,128,128,0.1)"}}}}
+  });
+
+  // Isı haritası (saat x gün, CSS grid)
+  const typeColors2 = {active:"#534AB7",rest:"#5DCAA5",meal:"#EF9F27",sleep:"#85B7EB"};
+  const hmEl = document.getElementById("ac-heatmap");
+  const hours = Array.from({length:24},(_,i)=>i);
+  let hmHtml = `<div style="display:grid;grid-template-columns:30px repeat(24,1fr);gap:2px;font-size:9px;">`;
+  hmHtml += `<div></div>${hours.map(h=>`<div style="text-align:center;color:var(--text3)">${h}</div>`).join("")}`;
+  activeDays.forEach(d=>{
+    hmHtml += `<div style="color:var(--text3);white-space:nowrap;padding-right:3px">${d.label}</div>`;
+    (d.heatmap||Array(24).fill(null)).forEach(type=>{
+      const bg = type ? typeColors2[type]+"99" : "var(--surface2)";
+      const title = type||"";
+      hmHtml += `<div title="${title}" style="height:14px;border-radius:2px;background:${bg}"></div>`;
+    });
+  });
+  hmHtml += `</div>`;
+  hmHtml += `<div style="display:flex;gap:10px;margin-top:6px;font-size:9px;color:var(--text3)">
+    <span><span style="display:inline-block;width:10px;height:10px;background:#534AB7;border-radius:2px"></span> Aktif</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:#5DCAA5;border-radius:2px"></span> Dinlenme</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:#EF9F27;border-radius:2px"></span> Yemek</span>
+    <span><span style="display:inline-block;width:10px;height:10px;background:#85B7EB;border-radius:2px"></span> Uyku</span>
+  </div>`;
+  hmEl.innerHTML = hmHtml;
+}
+
+
+// ── VERİ DIŞA AKTARMA ────────────────────────────────────────────────────────
+function exportData(type){
+  const sel = document.getElementById("analysis-person-select");
+  const pid = parseInt(sel.value);
+  if(!pid){ showToast("Önce kişi seçin","warn"); return; }
+  const labels = {activity:"Aktivite",sensor:"Sensör",daily:"Günlük Özet"};
+  showToast(labels[type]||type+" CSV indiriliyor...","ok");
+  window.open(API+"/export/"+pid+"?type="+type, "_blank");
+}
+
+// ── PDF RAPOR ─────────────────────────────────────────────────────────────────
+async function downloadAnalysisPDF(){
+  const sel = document.getElementById("analysis-person-select");
+  const pid = parseInt(sel.value);
+  if(!pid){ showToast("Önce kişi seçin","warn"); return; }
+  if(!window.lastAnalysisData){ showToast("Önce analizi yükleyin","warn"); return; }
+
+  const {jsPDF} = window.jspdf;
+  const doc  = new jsPDF();
+  const data = window.lastAnalysisData;
+  const p    = data.person;
+  const days = data.days.filter(d=>d.total_events>0||d.avg_hr>0);
+
+  // Başlık
+  doc.setFontSize(18); doc.setTextColor(83,74,183);
+  doc.text("Aktivite Simülatörü — Kişisel Sağlık Raporu", 14, 18);
+  doc.setFontSize(11); doc.setTextColor(60,60,80);
+  doc.text("Kişi: "+p.name+"   Yaş: "+(p.age||"—")+"   Şehir: "+(p.city||"—"), 14, 28);
+  doc.text("Rapor tarihi: "+new Date().toLocaleDateString("tr-TR"), 14, 35);
+  doc.text("Uyku düzensizliği: "+(data.sleep_irregularity||0)+" saat", 14, 42);
+  doc.setDrawColor(200,200,220); doc.line(14,46,196,46);
+
+  // Özet istatistikler
+  const avgHealth = days.length ? Math.round(days.reduce((s,d)=>s+(d.health_score||0),0)/days.length) : 0;
+  const avgSleep  = days.length ? Math.round(days.reduce((s,d)=>s+(d.sleep_mins||0),0)/days.length) : 0;
+  const avgSteps  = days.length ? Math.round(days.reduce((s,d)=>s+(d.steps||0),0)/days.length) : 0;
+  const avgStress = days.length ? Math.round(days.reduce((s,d)=>s+(d.avg_stress||0),0)/days.length) : 0;
+
+  doc.setFontSize(12); doc.setTextColor(83,74,183);
+  doc.text("Özet İstatistikler", 14, 55);
+  doc.setFontSize(10); doc.setTextColor(40,40,60);
+  doc.text("Ort. Sağlık Skoru: "+avgHealth+"/100", 14, 63);
+  doc.text("Ort. Uyku: "+Math.floor(avgSleep/60)+"s "+avgSleep%60+"dk", 80, 63);
+  doc.text("Ort. Adım: "+avgSteps.toLocaleString(), 14, 70);
+  doc.text("Ort. Stres: "+avgStress+"/100", 80, 70);
+
+  // Korelasyonlar
+  if(data.correlations && data.correlations.length){
+    doc.setFontSize(12); doc.setTextColor(83,74,183);
+    doc.text("Korelasyon Analizi", 14, 82);
+    doc.setFontSize(9); doc.setTextColor(60,60,80);
+    data.correlations.forEach((c,i)=>{
+      doc.text("• "+c.title+": "+c.desc, 14, 90+i*7);
+    });
+  }
+
+  // En iyi/kötü gün
+  let yPos = 82 + (data.correlations||[]).length*7 + 15;
+  if(data.best_day || data.worst_day){
+    doc.setFontSize(12); doc.setTextColor(83,74,183);
+    doc.text("En İyi / En Kötü Gün", 14, yPos);
+    yPos += 8;
+    doc.setFontSize(9); doc.setTextColor(40,40,60);
+    if(data.best_day){
+      const b = data.best_day;
+      doc.setTextColor(29,158,117);
+      doc.text("EN İYİ: "+b.label+" "+b.weekday+" — Skor: "+b.health_score+
+        "/100, Uyku: "+Math.floor((b.sleep_mins||0)/60)+"s, Adım: "+(b.steps||0).toLocaleString(), 14, yPos);
+      yPos += 7;
+    }
+    if(data.worst_day){
+      const w = data.worst_day;
+      doc.setTextColor(226,75,74);
+      doc.text("EN KÖTÜ: "+w.label+" "+w.weekday+" — Skor: "+w.health_score+
+        "/100, Uyku: "+Math.floor((w.sleep_mins||0)/60)+"s, Adım: "+(w.steps||0).toLocaleString(), 14, yPos);
+      yPos += 7;
+    }
+  }
+
+  // Günlük tablo
+  yPos += 8;
+  doc.setFontSize(12); doc.setTextColor(83,74,183);
+  doc.text("Günlük Detay", 14, yPos);
+  yPos += 8;
+  doc.setFontSize(8); doc.setTextColor(100,100,120);
+  ["Tarih","Sağlık","Uyku","Adım","Aktif dk","Stres","SpO2"].forEach((h,i)=>
+    doc.text(h, 14+i*26, yPos));
+  yPos += 5; doc.setDrawColor(220,220,230); doc.line(14,yPos,196,yPos); yPos += 4;
+  doc.setTextColor(30,30,50);
+
+  days.forEach(d=>{
+    if(yPos > 270){ doc.addPage(); yPos=20; }
+    [
+      d.label+" "+d.weekday,
+      (d.health_score||0)+"/100",
+      Math.floor((d.sleep_mins||0)/60)+"s"+(d.sleep_mins||0)%60+"dk",
+      (d.steps||0).toLocaleString(),
+      (d.active_mins||0)+" dk",
+      Math.round(d.avg_stress||0),
+      (d.avg_spo2||0)+"%"
+    ].forEach((v,i)=>doc.text(String(v), 14+i*26, yPos));
+    yPos += 7;
+  });
+
+  // Akıllı uyarılar
+  if(data.smart_alerts && data.smart_alerts.length){
+    if(yPos > 250){ doc.addPage(); yPos=20; }
+    yPos += 5;
+    doc.setFontSize(12); doc.setTextColor(83,74,183);
+    doc.text("Akıllı Uyarılar", 14, yPos); yPos += 8;
+    doc.setFontSize(9); doc.setTextColor(60,60,80);
+    data.smart_alerts.slice(0,8).forEach(a=>{
+      if(yPos>270){doc.addPage();yPos=20;}
+      const date = new Date(a.detected_at).toLocaleDateString("tr-TR");
+      doc.text("• ["+date+"] "+a.message_tr, 14, yPos);
+      yPos += 7;
+    });
+  }
+
+  doc.save("rapor_"+p.name.replace(/ /g,"_")+".pdf");
+  showToast("PDF rapor indirildi","ok");
+}
+
+// ── GÜNLÜK PROFİL & TAHMİN ───────────────────────────────────────────────────
+async function loadDailyProfile(){
+  const sel = document.getElementById("analysis-person-select");
+  const pid = parseInt(sel.value);
+  if(!pid){ showToast("Önce kişi seçin","warn"); return; }
+  const days = document.getElementById("analysis-days-select").value || 14;
+  const el   = document.getElementById("daily-profile-content");
+  el.innerHTML = '<div class="empty-state">Yükleniyor...</div>';
+  try{
+    const res  = await fetch(API+"/daily_profile/"+pid+"?days="+days);
+    const data = await res.json();
+    if(data.error){ el.innerHTML='<div class="empty-state" style="color:var(--red)">'+data.error+'</div>'; return; }
+    renderDailyProfile(data);
+  }catch(e){
+    el.innerHTML='<div class="empty-state" style="color:var(--red)">Yüklenemedi: '+e.message+'</div>';
+  }
+}
+
+function renderDailyProfile(data){
+  const el   = document.getElementById("daily-profile-content");
+  const p    = data.person;
+  const profs = data.profiles || [];
+  const anom  = data.anomalies || [];
+  const preds = data.predictions || [];
+  const card  = "background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:14px;box-shadow:var(--shadow);";
+
+  let html = '<div style="font-size:14px;font-weight:800;color:var(--accent);margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--accent)">🔬 '+p.name+' — Günlük Yaşam Profili & Tahmin</div>';
+
+  // ── Anomaliler ──
+  if(anom.length){
+    html += '<div style="'+card+'">'
+      + '<div style="font-size:12px;font-weight:700;margin-bottom:10px">⚠️ Tespit Edilen Anomaliler</div>';
+    anom.forEach(a=>{
+      const bg  = a.severity==="warning" ? "#fff4e0" : "#e8f4fc";
+      const bc  = a.severity==="warning" ? "#ef9f27" : "#378add";
+      const bgd = a.severity==="warning" ? "#3a2e00" : "#102030";
+      html += '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;'
+        + 'border-radius:8px;margin-bottom:6px;border-left:3px solid '+bc+';background:var(--surface2)">'
+        + '<span style="font-size:20px">'+a.icon+'</span>'
+        + '<div><div style="font-size:12px;font-weight:700;color:var(--text)">'+a.title+'</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:2px">'+a.desc+'</div></div>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Tahmin kartları ──
+  if(preds.length){
+    html += '<div style="'+card+'">'
+      + '<div style="font-size:12px;font-weight:700;margin-bottom:12px">🔮 Gelecek 3 Gün Tahmini</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">';
+    preds.forEach(pred=>{
+      const confColor = pred.confidence==="yüksek"?"#1d9e75":pred.confidence==="orta"?"#ef9f27":"#aaa";
+      html += '<div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center;border:1px solid var(--border)">'
+        + '<div style="font-size:13px;font-weight:800;color:var(--accent)">'+pred.date+'</div>'
+        + '<div style="font-size:10px;color:var(--text3);margin-bottom:8px">'+pred.weekday+(pred.is_weekend?' 🏖':'')+'</div>'
+        + '<div style="display:flex;flex-direction:column;gap:4px;font-size:11px">'
+        + (pred.wake_time ? '<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">⏰ Uyanış</span><strong>'+pred.wake_time+'</strong></div>' : '')
+        + (pred.steps ? '<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">🚶 Adım</span><strong>'+(pred.steps).toLocaleString("tr-TR")+'</strong></div>' : '')
+        + (pred.sleep_mins ? '<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">😴 Uyku</span><strong>'+Math.floor(pred.sleep_mins/60)+'s '+(pred.sleep_mins%60)+'dk</strong></div>' : '')
+        + (pred.avg_stress ? '<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">🧠 Stres</span><strong>'+Math.round(pred.avg_stress)+'/100</strong></div>' : '')
+        + (pred.avg_hr ? '<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">❤️ Nabız</span><strong>'+Math.round(pred.avg_hr)+' bpm</strong></div>' : '')
+        + '</div>'
+        + '<div style="margin-top:8px;font-size:9px;color:'+confColor+'">Güven: '+pred.confidence+'</div>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // ── Karşılaştırma tablosu ──
+  if(profs.length){
+    html += '<div style="'+card+'overflow-x:auto">'
+      + '<div style="font-size:12px;font-weight:700;margin-bottom:10px">📅 Günlük Profil Karşılaştırması</div>'
+      + '<table style="min-width:800px;font-size:11px">'
+      + '<thead><tr>'
+      + '<th>Tarih</th><th>Uyanış</th><th>Δ Uyanış</th><th>Uyku</th>'
+      + '<th>İlk Aktivite</th><th>Adım</th><th>Δ Adım</th>'
+      + '<th>Aktif dk</th><th>Stres</th><th>Δ Stres</th><th>Nabız</th><th>SpO₂</th>'
+      + '</tr></thead><tbody>';
+
+    profs.forEach(p2=>{
+      function deltaCell(val, reverse=false){
+        if(val === null || val === undefined) return '<td style="color:var(--text3)">—</td>';
+        const pos = reverse ? val < 0 : val > 0;
+        const neg = reverse ? val > 0 : val < 0;
+        const color = pos ? "#1d9e75" : neg ? "#e24b4a" : "var(--text3)";
+        const icon  = val > 0 ? "↑" : val < 0 ? "↓" : "→";
+        return '<td style="color:'+color+';font-weight:700">'+icon+(val>0?"+":"")+val+'</td>';
+      }
+      html += '<tr>'
+        + '<td><strong>'+p2.label+'</strong><br><span style="color:var(--text3);font-size:9px">'+p2.weekday+'</span></td>'
+        + '<td>'+(p2.wake_time_str||"—")+'</td>'
+        + deltaCell(p2.wake_delta_mins, true)  // gecikme kötü
+        + '<td>'+(p2.sleep_mins ? Math.floor(p2.sleep_mins/60)+'s'+(p2.sleep_mins%60)+'dk' : "—")+'</td>'
+        + '<td style="font-size:10px">'+(p2.first_act_name||"—")+'</td>'
+        + '<td>'+(p2.steps||0).toLocaleString("tr-TR")+'</td>'
+        + deltaCell(p2.steps_delta)
+        + '<td>'+(p2.active_mins||0)+' dk</td>'
+        + '<td>'+(p2.avg_stress?Math.round(p2.avg_stress):"—")+'</td>'
+        + deltaCell(p2.stress_delta, true)  // stres artışı kötü
+        + '<td>'+(p2.avg_hr?Math.round(p2.avg_hr)+" bpm":"—")+'</td>'
+        + '<td>'+(p2.avg_spo2||"—")+'%</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  el.innerHTML = html || '<div class="empty-state">Yeterli veri yok</div>';
+}
+
+// ── ANOMALİ GÜNCELLEME (WebSocket trigger) ───────────────────────────────────
+async function fetchAnomalies(){
+  try{
+    const res  = await fetch(API+"/anomalies");
+    const data = await res.json();
+    renderAnomalies(data);
+    // Yeni anomalileri bildirim merkezine ekle
+    data.forEach(a=>{
+      if(!seenAnomalies.has(a.id)){
+        seenAnomalies.add(a.id);
+        const msg  = lang==="en"&&a.message_en ? a.message_en : a.message_tr;
+        const type = a.severity==="critical" ? "critical" : "warn";
+        showToast(a.person_name+" — "+msg, type, 5000, a.person_name);
+      }
+    });
+  }catch(e){}
+}
+
+// ── BİLDİRİM MERKEZİ ────────────────────────────────────────────────────────
+const notifStore = [];
+let notifUnread  = 0;
+
+function addNotif(msg, type="warn", person=""){
+  const item = {msg, type, person, time: new Date(), read: false};
+  notifStore.unshift(item);
+  if(notifStore.length > 50) notifStore.pop();
+  notifUnread++;
+  renderNotifPanel();
+  updateNotifBadge();
+}
+
+function updateNotifBadge(){
+  const badge = document.getElementById("notif-badge");
+  if(!badge) return;
+  if(notifUnread > 0){
+    badge.textContent = notifUnread > 9 ? "9+" : notifUnread;
+    badge.classList.add("show");
+  } else {
+    badge.classList.remove("show");
+  }
+}
+
+function renderNotifPanel(){
+  const list = document.getElementById("notif-list");
+  if(!list) return;
+  if(!notifStore.length){
+    list.innerHTML = '<div class="notif-empty">Henüz bildirim yok</div>';
+    return;
+  }
+  const icons = {warn:"⚠️", critical:"🚨", ok:"✅", info:"ℹ️"};
+  list.innerHTML = notifStore.map((n,i) => {
+    const ts = n.time.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
+    const date = n.time.toLocaleDateString("tr-TR",{day:"2-digit",month:"short"});
+    return '<div class="notif-item'+(n.read?'':' unread')+'" onclick="markRead('+i+')">'
+      + '<span class="notif-icon">'+(icons[n.type]||"ℹ️")+'</span>'
+      + '<div class="notif-body">'
+      + '<div class="notif-msg">'+(n.person?'<strong>'+n.person+'</strong> — ':'')+n.msg+'</div>'
+      + '<div class="notif-time">'+date+' '+ts+'</div>'
+      + '</div></div>';
+  }).join("");
+}
+
+function markRead(idx){
+  if(notifStore[idx] && !notifStore[idx].read){
+    notifStore[idx].read = true;
+    notifUnread = Math.max(0, notifUnread-1);
+    updateNotifBadge();
+    renderNotifPanel();
+  }
+}
+
+function clearNotifs(){
+  notifStore.length = 0;
+  notifUnread = 0;
+  updateNotifBadge();
+  renderNotifPanel();
+}
+
+function toggleNotifPanel(){
+  const panel = document.getElementById("notif-panel");
+  if(!panel) return;
+  panel.classList.toggle("open");
+  if(panel.classList.contains("open")){
+    // Tümünü okundu yap
+    notifStore.forEach(n=>n.read=true);
+    notifUnread = 0;
+    updateNotifBadge();
+    renderNotifPanel();
+  }
+}
+// Panel dışına tıklayınca kapat
+document.addEventListener("click", e=>{
+  const panel = document.getElementById("notif-panel");
+  const btn   = document.getElementById("notif-btn");
+  if(panel && btn && !panel.contains(e.target) && !btn.contains(e.target)){
+    panel.classList.remove("open");
+  }
+});
+
+// ── ZAMANÇİZELGESİ ───────────────────────────────────────────────────────────
+const TYPE_COLORS = {active:"#534AB7",rest:"#5DCAA5",meal:"#EF9F27",sleep:"#85B7EB"};
+const TYPE_NAMES  = {active:"Aktif",rest:"Dinlenme",meal:"Yemek",sleep:"Uyku"};
+
+async function loadTimeline(){
+  const sel  = document.getElementById("timeline-person-select");
+  const dsel = document.getElementById("timeline-days-select");
+  const pid  = parseInt(sel.value);
+  if(!pid) return;
+  const days = parseInt(dsel.value)||7;
+  document.getElementById("timeline-loading").style.display="inline";
+  document.getElementById("timeline-content").innerHTML="";
+
+  try{
+    const res  = await fetch(API+"/analysis/"+pid+"?days="+days);
+    const data = await res.json();
+    if(data.error){ document.getElementById("timeline-content").innerHTML='<div class="empty-state">'+data.error+'</div>'; return; }
+    renderTimeline(data);
+  }catch(e){
+    document.getElementById("timeline-content").innerHTML='<div class="empty-state" style="color:var(--red)">Yüklenemedi.</div>';
+  }
+  document.getElementById("timeline-loading").style.display="none";
+}
+
+function renderTimeline(data){
+  const el   = document.getElementById("timeline-content");
+  const days = data.days.filter(d=>d.total_events>0||d.heatmap);
+  if(!days.length){ el.innerHTML='<div class="empty-state">Veri yok</div>'; return; }
+
+  const card = "background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:12px;box-shadow:var(--shadow);";
+  const hours = Array.from({length:24},(_,i)=>i);
+
+  // Tooltip
+  const tooltip = document.getElementById("tl-tooltip");
+
+  let html = '';
+  days.forEach(d=>{
+    html += '<div class="timeline-day">'
+      + '<div class="timeline-day-label">'+d.label+' '+d.weekday+'</div>';
+
+    // Sağlık skoru badge
+    const hs = d.health_score||0;
+    const hsColor = hs>=75?"#1d9e75":hs>=50?"#ef9f27":"#e24b4a";
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      + '<span style="font-size:10px;color:var(--text3)">Sağlık:</span>'
+      + '<span style="font-size:11px;font-weight:700;color:'+hsColor+'">'+hs+'/100</span>'
+      + '<span style="font-size:10px;color:var(--text3)">Uyku: '+(d.sleep_mins?Math.floor(d.sleep_mins/60)+'s':'—')+'</span>'
+      + '<span style="font-size:10px;color:var(--text3)">Adım: '+(d.steps||0).toLocaleString("tr-TR")+'</span>'
+      + '</div>';
+
+    // 24 saatlik track
+    html += '<div class="timeline-track" id="track-'+d.date+'">';
+    (d.heatmap||[]).forEach((type,h)=>{
+      if(!type) return;
+      const left  = (h/24*100).toFixed(2)+"%";
+      const width = (1/24*100).toFixed(2)+"%";
+      const color = TYPE_COLORS[type]||"#888";
+      const name  = TYPE_NAMES[type]||type;
+      html += '<div class="timeline-block" style="left:'+left+';width:'+width+';background:'+color+'"'
+        + ' data-hour="'+h+'" data-type="'+name+'" data-date="'+d.label+'">'
+        + '</div>';
+    });
+    html += '</div>';
+
+    // Saat etiketleri
+    html += '<div class="timeline-hours">';
+    [0,3,6,9,12,15,18,21].forEach(h=>{
+      html += '<div style="flex:'+(h===0?1:3)+';font-size:8px;color:var(--text3)">'+h+'</div>';
+    });
+    html += '</div>';
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+
+  // Tooltip event'leri
+  el.querySelectorAll(".timeline-block").forEach(block=>{
+    block.addEventListener("mousemove", e=>{
+      if(!tooltip) return;
+      tooltip.style.display="block";
+      tooltip.style.left=(e.clientX+12)+"px";
+      tooltip.style.top=(e.clientY-30)+"px";
+      tooltip.innerHTML='<strong>'+block.dataset.date+' '+block.dataset.hour+':00</strong><br>'+block.dataset.type;
+    });
+    block.addEventListener("mouseleave", ()=>{
+      if(tooltip) tooltip.style.display="none";
+    });
+  });
+}
+
+// ── SİMÜLASYON HIZI ──────────────────────────────────────────────────────────
+async function setSimSpeed(speed){
+  await fetch(API+"/sim_speed",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({speed})});
+  [1,2,5].forEach(s=>{
+    const btn = document.getElementById("spd-"+s);
+    if(btn){
+      btn.style.background   = s===speed ? "var(--accent)" : "";
+      btn.style.color        = s===speed ? "#fff" : "";
+      btn.style.borderColor  = s===speed ? "var(--accent)" : "";
+      btn.style.fontWeight   = s===speed ? "800" : "";
+    }
+  });
+  showToast(`Simülasyon hızı ${speed}x`,`ok`);
+}
+
+// ── TREND OKLARI (KİŞİ KARTI) ────────────────────────────────────────────────
+const personTrends = {};
+async function loadPersonTrend(pid){
+  try{
+    const res  = await fetch(API+"/trend/"+pid);
+    const data = await res.json();
+    personTrends[pid] = data;
+    renderPersonTrend(pid, data);
+  }catch(e){}
+}
+
+function renderPersonTrend(pid, data){
+  const vals = data.filter(d=>d.steps>0||d.active_mins>0);
+  if(vals.length < 2) return;
+
+  function arrow(key, invert=false){
+    const v = vals.map(d=>d[key]).filter(x=>x>0);
+    if(v.length < 2) return {icon:"→",cls:"trend-stable"};
+    const recent = v.slice(-3).reduce((a,b)=>a+b,0)/Math.min(3,v.length);
+    const older  = v.slice(0,-3).reduce((a,b)=>a+b,0)/Math.max(1,v.length-3);
+    const diff   = older > 0 ? (recent-older)/older*100 : 0;
+    if(diff > 10)  return invert ? {icon:"↑",cls:"trend-down"} : {icon:"↑",cls:"trend-up"};
+    if(diff < -10) return invert ? {icon:"↓",cls:"trend-up"}   : {icon:"↓",cls:"trend-down"};
+    return {icon:"→",cls:"trend-stable"};
+  }
+
+  const steps  = arrow("steps");
+  const active = arrow("active_mins");
+  const sleep  = arrow("sleep_mins");
+
+  const el = document.getElementById("trend-"+pid);
+  if(!el) return;
+  el.innerHTML = `
+    <span style="color:var(--text3)">Trend (7g):</span>
+    <span class="${steps.cls}">🚶 ${steps.icon} adım</span>
+    <span class="${active.cls}">⏱ ${active.icon} aktif</span>
+    <span class="${sleep.cls}">😴 ${sleep.icon} uyku</span>`;
+}
+
+// ── ANOMALİ EŞİĞİ MODAL ──────────────────────────────────────────────────────
+function showThresholdModal(pid){
+  const p = st.persons[pid];
+  if(!p) return;
+  const existing = document.getElementById("threshold-modal");
+  if(existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.className = "modal-overlay";
+  modal.id = "threshold-modal";
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-title">⚙️ ${p.name} — Kişisel Anomali Eşiği</div>
+      <div class="modal-field">
+        <label>Nabız uyarı eşiği (bpm) — şu an: ${p.anomaly_hr_threshold||130}</label>
+        <input type="number" id="th-hr" value="${p.anomaly_hr_threshold||130}" min="80" max="200"/>
+      </div>
+      <div class="modal-field">
+        <label>Stres uyarı eşiği (/100) — şu an: ${p.anomaly_stress_threshold||75}</label>
+        <input type="number" id="th-stress" value="${p.anomaly_stress_threshold||75}" min="20" max="100"/>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm" onclick="document.getElementById('threshold-modal').remove()"
+          style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">İptal</button>
+        <button class="btn btn-primary btn-sm" onclick="saveThreshold(${pid})">Kaydet</button>
+      </div>
+    </div>`;
+  modal.addEventListener("click", e=>{ if(e.target===modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function saveThreshold(pid){
+  const hr     = parseInt(document.getElementById("th-hr").value);
+  const stress = parseInt(document.getElementById("th-stress").value);
+  await fetch(API+"/persons/"+pid,{method:"PATCH",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({anomaly_hr_threshold:hr,anomaly_stress_threshold:stress})});
+  if(st.persons[pid]){
+    st.persons[pid].anomaly_hr_threshold    = hr;
+    st.persons[pid].anomaly_stress_threshold = stress;
+  }
+  document.getElementById("threshold-modal").remove();
+  showToast("Eşik değerleri kaydedildi","ok");
+}
+
+// ── SÜRÜKLE-BIRAK ─────────────────────────────────────────────────────────────
+let dragSrcId = null;
+function initDragDrop(cardEl, pid){
+  cardEl.setAttribute("draggable","true");
+  cardEl.addEventListener("dragstart", e=>{
+    dragSrcId = pid;
+    setTimeout(()=>cardEl.classList.add("dragging"),0);
+    e.dataTransfer.effectAllowed="move";
+  });
+  cardEl.addEventListener("dragend",   ()=>cardEl.classList.remove("dragging"));
+  cardEl.addEventListener("dragover",  e=>{e.preventDefault();cardEl.classList.add("drag-over");});
+  cardEl.addEventListener("dragleave", ()=>cardEl.classList.remove("drag-over"));
+  cardEl.addEventListener("drop", e=>{
+    e.preventDefault();
+    cardEl.classList.remove("drag-over");
+    if(dragSrcId === pid) return;
+    const grid   = document.getElementById("persons-grid");
+    const srcEl  = document.getElementById("card-"+dragSrcId);
+    const dstEl  = document.getElementById("card-"+pid);
+    if(!srcEl||!dstEl) return;
+    const srcIdx = Array.from(grid.children).indexOf(srcEl);
+    const dstIdx = Array.from(grid.children).indexOf(dstEl);
+    if(srcIdx < dstIdx) grid.insertBefore(srcEl, dstEl.nextSibling);
+    else                grid.insertBefore(srcEl, dstEl);
+    dragSrcId = null;
+  });
+}
+
+setInterval(()=>document.getElementById("clock").textContent=
+  new Date().toLocaleTimeString(lang==="tr"?"tr-TR":"en-US"), 1000);
+applyLang();
+fetchAll();
+setInterval(fetchAll, 30000);  // 30sn tam senkron — WebSocket anlık günceller
+</script>
+</body>
+</html>
