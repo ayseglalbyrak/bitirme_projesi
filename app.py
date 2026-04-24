@@ -213,6 +213,29 @@ def init_db():
         severity TEXT DEFAULT 'info',
         detected_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (person_id) REFERENCES persons(id))""")
+    # Dağılım ayarları tablosu
+    c.execute("""CREATE TABLE IF NOT EXISTS distribution_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        metric TEXT NOT NULL UNIQUE,
+        distribution TEXT DEFAULT 'normal',
+        params TEXT DEFAULT '{}',
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    defaults = [
+        ('heart_rate','normal',     '{"mean":75,"std":10}'),
+        ('spo2',      'normal',     '{"mean":97.5,"std":0.8}'),
+        ('skin_temp', 'normal',     '{"mean":36.5,"std":0.2}'),
+        ('hrv',       'normal',     '{"mean":45,"std":12}'),
+        ('stress',    'exponential','{"scale":25,"offset":5}'),
+        ('steps',     'lognormal',  '{"mean":8.2,"sigma":0.9}'),
+        ('sleep_mins','triangular', '{"low":300,"mode":450,"high":560}'),
+        ('active_mins','normal',    '{"mean":60,"std":25}'),
+    ]
+    for metric, dist, params in defaults:
+        try:
+            c.execute("INSERT OR IGNORE INTO distribution_settings (metric,distribution,params) VALUES (?,?,?)",
+                      (metric, dist, params))
+        except: pass
+
     # Migration: eski DB'lere sütun ekle
     for tbl, col in [
         ("activity_log", "start_time TEXT"),
@@ -229,6 +252,10 @@ def init_db():
             pass
     conn.commit()
     conn.close()
+    # Katkı tabloları
+    conn2 = sqlite3.connect(DB_PATH)
+    init_contribution_tables(conn2)
+    conn2.close()
 
 
 def get_db():
@@ -658,9 +685,19 @@ def simulation_loop():
                 np_ = min(100, int((nsi / max(s["duration"], 1)) * 100))
 
                 prev_hr    = s["heart_rate"]
-                new_hr     = int(smooth(prev_hr, noisy(act["hr_base"], act["hr_noise"], 40, 200), alpha=0.15))
-                new_spo2   = round(smooth(s["spo2"],      noisy(act["spo2_base"], 0.3, 90, 100), 0.1), 1)
-                new_temp   = round(smooth(s["skin_temp"], noisy(act["skin_temp"], 0.15, 35, 40), 0.08), 2)
+                # Güncel dağılım ayarlarını kullan
+                _ds = get_dist_settings_cached()
+                def _sim_sample(metric, base, noise, lo, hi):
+                    cfg = _ds.get(metric)
+                    if cfg:
+                        p = {**cfg["params"]}
+                        if "mean" in p:
+                            p["mean"] = base + (p["mean"] - (p.get("mean",base))) * 0.2
+                        return sample_distribution(cfg["distribution"], p, lo, hi)
+                    return noisy(base, noise, lo, hi)
+                new_hr     = int(smooth(prev_hr, _sim_sample("heart_rate",act["hr_base"],act["hr_noise"],40,200), alpha=0.15))
+                new_spo2   = round(smooth(s["spo2"],      _sim_sample("spo2",act["spo2_base"],0.3,90,100), 0.1), 1)
+                new_temp   = round(smooth(s["skin_temp"], noisy(act["skin_temp"],0.15,35,40), 0.08), 2)
                 new_stress = compute_stress(act["type"], new_hr, nsi)
                 new_hrv    = compute_hrv(new_hr, new_stress)
 
@@ -935,6 +972,106 @@ def on_connect():
 def on_disconnect():
     pass
 
+# ── DAĞILIM FONKSİYONU ───────────────────────────────────────────────────────
+
+def sample_distribution(dist_name, params, min_v=None, max_v=None):
+    import math as _math
+    try:
+        d = dist_name.lower()
+        if d == "normal":
+            v = random.gauss(params.get("mean",75), params.get("std",10))
+        elif d == "uniform":
+            v = random.uniform(params.get("low",60), params.get("high",90))
+        elif d == "exponential":
+            scale = params.get("scale",20)
+            v = random.expovariate(1.0/max(scale,0.001)) + params.get("offset",0)
+        elif d == "poisson":
+            lam = params.get("lam",5)
+            L, k, p = _math.exp(-lam), 0, 1.0
+            while p > L:
+                k += 1; p *= random.random()
+            v = float(k - 1)
+        elif d == "lognormal":
+            v = random.lognormvariate(params.get("mean",4.3), params.get("sigma",0.5))
+        elif d == "triangular":
+            v = random.triangular(params.get("low",0), params.get("high",100), params.get("mode",50))
+        elif d == "beta":
+            v = random.betavariate(params.get("alpha",2), params.get("beta",5)) * params.get("scale",100)
+        else:
+            v = random.gauss(params.get("mean",75), params.get("std",10))
+    except:
+        v = params.get("mean",75) + random.gauss(0, params.get("std",10))
+    if min_v is not None: v = max(min_v, v)
+    if max_v is not None: v = min(max_v, v)
+    return v
+
+
+def get_dist_settings():
+    import json as _json
+    conn = get_db()
+    rows = conn.execute("SELECT metric,distribution,params FROM distribution_settings").fetchall()
+    conn.close()
+    result = {}
+    for r in rows:
+        try:
+            result[r["metric"]] = {"distribution": r["distribution"], "params": _json.loads(r["params"])}
+        except:
+            result[r["metric"]] = {"distribution": "normal", "params": {}}
+    return result
+
+_dist_cache = {}
+_dist_cache_time = 0
+
+def get_dist_settings_cached():
+    global _dist_cache, _dist_cache_time
+    now_t = time.time()
+    if now_t - _dist_cache_time > 60:
+        _dist_cache = get_dist_settings()
+        _dist_cache_time = now_t
+    return _dist_cache
+
+
+@app.route("/api/distributions", methods=["GET"])
+def get_distributions():
+    import json as _json
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM distribution_settings ORDER BY metric").fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/distributions", methods=["POST"])
+def update_distributions():
+    import json as _json
+    items = request.json
+    if not isinstance(items, list): items = [items]
+    conn = get_db(); c = conn.cursor()
+    for item in items:
+        metric = item.get("metric","").strip()
+        dist   = item.get("distribution","normal")
+        params = _json.dumps(item.get("params",{}))
+        if metric:
+            c.execute("""INSERT INTO distribution_settings (metric,distribution,params,updated_at)
+                VALUES (?,?,?,?) ON CONFLICT(metric) DO UPDATE SET
+                distribution=excluded.distribution,params=excluded.params,
+                updated_at=excluded.updated_at""",
+                (metric,dist,params,datetime.now().isoformat()))
+    conn.commit(); conn.close()
+    global _dist_cache_time; _dist_cache_time = 0
+    return jsonify({"ok": True})
+
+@app.route("/api/distributions/preview", methods=["POST"])
+def preview_distribution():
+    d = request.json
+    dist   = d.get("distribution","normal")
+    params = d.get("params",{})
+    min_v  = d.get("min_v",None)
+    max_v  = d.get("max_v",None)
+    samples = [round(sample_distribution(dist,params,min_v,max_v),2) for _ in range(100)]
+    mean = sum(samples)/len(samples)
+    std  = (sum((x-mean)**2 for x in samples)/len(samples))**0.5
+    return jsonify({"samples":samples,"mean":round(mean,2),"std":round(std,2),"min":min(samples),"max":max(samples)})
+
+
 @app.route("/api/avatar_colors", methods=["GET"])
 def avatar_colors():
     return jsonify(AVATAR_COLORS)
@@ -1002,6 +1139,354 @@ def get_locations():
     conn.close(); return jsonify([dict(r) for r in rows])
 
 
+
+
+@app.route("/api/pattern_analysis/<int:pid>", methods=["GET"])
+def get_pattern_analysis(pid):
+    """
+    Kişiye özgü günlük yaşam örüntüsü analizi.
+    - Tüm metrikler için kişisel norm hesapla (ortalama + std)
+    - Her gün için sapmayı tespit et
+    - İleriye yönelik 3 günlük tahmin üret
+    """
+    days_back = int(request.args.get("days", 14))
+    conn = get_db()
+
+    person = conn.execute("SELECT * FROM persons WHERE id=?", (pid,)).fetchone()
+    if not person:
+        conn.close()
+        return jsonify({"error": "Kişi bulunamadı"}), 404
+
+    # Her gün için tam profil çıkar
+    daily = []
+    for i in range(days_back - 1, -1, -1):
+        d       = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+        label   = (datetime.now() - timedelta(days=i)).strftime("%d/%m")
+        weekday = (datetime.now() - timedelta(days=i)).strftime("%A")
+        is_weekend = weekday in ["Saturday", "Sunday"]
+        weekday_tr = {"Monday":"Pzt","Tuesday":"Sal","Wednesday":"Çar",
+                      "Thursday":"Per","Friday":"Cum","Saturday":"Cmt","Sunday":"Paz"}.get(weekday, weekday)
+
+        def safe_hour(timestr):
+            if not timestr: return None
+            try:
+                dt = datetime.fromisoformat(timestr)
+                return round(dt.hour + dt.minute / 60, 2)
+            except:
+                try:
+                    parts = timestr.split(":")
+                    return round(int(parts[0]) + int(parts[1]) / 60, 2)
+                except:
+                    return None
+
+        # Uyku
+        sleep_rec = conn.execute("""
+            SELECT start_time, end_time, duration_mins FROM activity_log
+            WHERE person_id=? AND activity_type='sleep'
+              AND date(start_time,'localtime')=?
+            ORDER BY duration_mins DESC LIMIT 1
+        """, (pid, d)).fetchone()
+        wake_hour  = safe_hour(sleep_rec["end_time"])   if sleep_rec else None
+        sleep_hour = safe_hour(sleep_rec["start_time"]) if sleep_rec else None
+        sleep_mins = sleep_rec["duration_mins"] if sleep_rec else 0
+
+        # İlk aktivite saati (uyku dışı)
+        first_act = conn.execute("""
+            SELECT start_time, activity_name FROM activity_log
+            WHERE person_id=? AND activity_type != 'sleep'
+              AND date(start_time,'localtime')=?
+            ORDER BY start_time ASC LIMIT 1
+        """, (pid, d)).fetchone()
+        first_act_hour = safe_hour(first_act["start_time"]) if first_act else None
+        first_act_name = first_act["activity_name"] if first_act else None
+
+        # İlk egzersiz saati ve süresi
+        exercise = conn.execute("""
+            SELECT start_time, SUM(duration_mins) as total_dur,
+                   COUNT(*) as cnt
+            FROM activity_log
+            WHERE person_id=? AND activity_type='active'
+              AND date(start_time,'localtime')=?
+            GROUP BY date(start_time,'localtime')
+            ORDER BY start_time ASC LIMIT 1
+        """, (pid, d)).fetchone()
+        exercise_hour = safe_hour(exercise["start_time"]) if exercise else None
+        exercise_mins = int(exercise["total_dur"] or 0) if exercise else 0
+
+        # Yemek saatleri
+        meals = conn.execute("""
+            SELECT start_time FROM activity_log
+            WHERE person_id=? AND activity_type='meal'
+              AND date(start_time,'localtime')=?
+            ORDER BY start_time ASC
+        """, (pid, d)).fetchall()
+        meal_hours = [safe_hour(m["start_time"]) for m in meals if safe_hour(m["start_time"])]
+
+        # Dışarı çıkış (aktif aktivite — yürüyüş, bisiklet, alışveriş vb.)
+        outdoor = conn.execute("""
+            SELECT start_time FROM activity_log
+            WHERE person_id=? AND activity_type='active'
+              AND date(start_time,'localtime')=?
+            ORDER BY start_time ASC LIMIT 1
+        """, (pid, d)).fetchone()
+        outdoor_hour = safe_hour(outdoor["start_time"]) if outdoor else None
+
+        # Günlük metrikler
+        metrics = conn.execute("""
+            SELECT COALESCE(MAX(steps_snap),0) as steps,
+                   COALESCE(MAX(calories_snap),0) as calories,
+                   COALESCE(SUM(CASE WHEN activity_type='active' THEN duration_mins ELSE 0 END),0) as active_mins,
+                   COUNT(*) as event_count
+            FROM activity_log WHERE person_id=? AND date(start_time,'localtime')=?
+        """, (pid, d)).fetchone()
+
+        sensor = conn.execute("""
+            SELECT ROUND(AVG(heart_rate),1) as avg_hr,
+                   ROUND(AVG(spo2),1) as avg_spo2,
+                   ROUND(AVG(stress_level),1) as avg_stress,
+                   ROUND(AVG(hrv),1) as avg_hrv,
+                   MAX(heart_rate) as max_hr,
+                   MIN(CASE WHEN heart_rate>0 THEN heart_rate END) as min_hr
+            FROM sensor_log WHERE person_id=? AND date(recorded_at,'localtime')=?
+        """, (pid, d)).fetchone()
+
+        daily.append({
+            "date": d, "label": label, "weekday": weekday_tr, "is_weekend": is_weekend,
+            "wake_hour":     wake_hour,
+            "sleep_hour":    sleep_hour,
+            "sleep_mins":    sleep_mins,
+            "first_act_hour": first_act_hour,
+            "first_act_name": first_act_name,
+            "exercise_hour":  exercise_hour,
+            "exercise_mins":  exercise_mins,
+            "outdoor_hour":   outdoor_hour,
+            "meal_hours":     meal_hours,
+            "meal_count":     len(meal_hours),
+            "first_meal_hour": meal_hours[0] if meal_hours else None,
+            "last_meal_hour":  meal_hours[-1] if meal_hours else None,
+            "steps":       int(metrics["steps"] or 0),
+            "calories":    round(float(metrics["calories"] or 0), 1),
+            "active_mins": int(metrics["active_mins"] or 0),
+            "avg_hr":      float(sensor["avg_hr"] or 0),
+            "avg_spo2":    float(sensor["avg_spo2"] or 0),
+            "avg_stress":  float(sensor["avg_stress"] or 0),
+            "avg_hrv":     float(sensor["avg_hrv"] or 0),
+            "max_hr":      int(sensor["max_hr"] or 0),
+        })
+
+    # Aktif günler (veri olan günler)
+    active = [d for d in daily if d["event_count"] > 0] if False else [d for d in daily if d["steps"] > 0 or d["avg_hr"] > 0]
+
+    # ── Norm hesapla (hafta içi / hafta sonu ayrı) ────────────────────────────
+    import statistics
+
+    def calc_norm(vals):
+        """Bir metrik için norm hesapla"""
+        vals = [v for v in vals if v is not None and v > 0]
+        if len(vals) < 2:
+            return {"mean": vals[0] if vals else None, "std": 0, "min": vals[0] if vals else None, "max": vals[0] if vals else None, "n": len(vals)}
+        mean = sum(vals) / len(vals)
+        std  = statistics.stdev(vals)
+        return {
+            "mean": round(mean, 2),
+            "std":  round(std, 2),
+            "min":  round(min(vals), 2),
+            "max":  round(max(vals), 2),
+            "low":  round(mean - std, 2),
+            "high": round(mean + std, 2),
+            "n":    len(vals)
+        }
+
+    weekday_data  = [d for d in active if not d["is_weekend"]]
+    weekend_data  = [d for d in active if d["is_weekend"]]
+
+    def norms_for(data):
+        return {
+            "wake_hour":      calc_norm([d["wake_hour"]      for d in data]),
+            "sleep_hour":     calc_norm([d["sleep_hour"]     for d in data]),
+            "sleep_mins":     calc_norm([d["sleep_mins"]     for d in data]),
+            "first_act_hour": calc_norm([d["first_act_hour"] for d in data]),
+            "exercise_hour":  calc_norm([d["exercise_hour"]  for d in data]),
+            "exercise_mins":  calc_norm([d["exercise_mins"]  for d in data]),
+            "outdoor_hour":   calc_norm([d["outdoor_hour"]   for d in data]),
+            "first_meal_hour":calc_norm([d["first_meal_hour"]for d in data]),
+            "last_meal_hour": calc_norm([d["last_meal_hour"] for d in data]),
+            "meal_count":     calc_norm([d["meal_count"]     for d in data]),
+            "steps":          calc_norm([d["steps"]          for d in data]),
+            "calories":       calc_norm([d["calories"]       for d in data]),
+            "active_mins":    calc_norm([d["active_mins"]    for d in data]),
+            "avg_hr":         calc_norm([d["avg_hr"]         for d in data]),
+            "avg_spo2":       calc_norm([d["avg_spo2"]       for d in data]),
+            "avg_stress":     calc_norm([d["avg_stress"]     for d in data]),
+            "avg_hrv":        calc_norm([d["avg_hrv"]        for d in data]),
+        }
+
+    norms = {
+        "weekday": norms_for(weekday_data) if weekday_data else {},
+        "weekend": norms_for(weekend_data) if weekend_data else {},
+        "all":     norms_for(active)       if active       else {},
+    }
+
+    # ── Sapma hesapla ─────────────────────────────────────────────────────────
+    def deviation_score(value, norm):
+        """Değerin normdan kaç std sapma uzakta olduğunu hesapla"""
+        if value is None or norm is None or norm.get("mean") is None:
+            return None
+        if norm.get("std", 0) == 0:
+            return 0
+        return round((value - norm["mean"]) / norm["std"], 2)
+
+    METRICS = [
+        ("wake_hour",       "Uyanış Saati",        "saat",  False),
+        ("sleep_hour",      "Uyku Saati",           "saat",  False),
+        ("sleep_mins",      "Uyku Süresi",          "dk",    True),
+        ("first_act_hour",  "İlk Aktivite Saati",   "saat",  False),
+        ("exercise_hour",   "Egzersiz Saati",       "saat",  False),
+        ("exercise_mins",   "Egzersiz Süresi",      "dk",    True),
+        ("outdoor_hour",    "Dışarı Çıkış Saati",   "saat",  False),
+        ("first_meal_hour", "İlk Yemek Saati",      "saat",  False),
+        ("last_meal_hour",  "Son Yemek Saati",      "saat",  False),
+        ("steps",           "Adım Sayısı",          "adım",  True),
+        ("calories",        "Kalori",               "kcal",  True),
+        ("active_mins",     "Aktif Süre",           "dk",    True),
+        ("avg_hr",          "Ort. Nabız",           "bpm",   False),
+        ("avg_stress",      "Ort. Stres",           "/100",  False),
+        ("avg_hrv",         "Ort. HRV",             "",      True),
+        ("avg_spo2",        "Ort. SpO₂",            "%",     True),
+    ]
+
+    for day in active:
+        norm_key = "weekend" if day["is_weekend"] else "weekday"
+        day_norms = norms.get(norm_key) or norms.get("all") or {}
+        day["deviations"] = {}
+        day["deviation_flags"] = []
+
+        for key, label, unit, higher_better in METRICS:
+            val  = day.get(key)
+            norm = day_norms.get(key)
+            dev  = deviation_score(val, norm)
+            day["deviations"][key] = dev
+
+            if dev is not None and abs(dev) >= 1.5:
+                direction = "yüksek" if dev > 0 else "düşük"
+                severity  = "kritik" if abs(dev) >= 2.5 else "uyarı"
+                # Yüksek/düşük yorumu metriğe göre farklılaştır
+                if not higher_better:
+                    interpretation = f"normalden {round(abs(dev),1)} std {'geç' if dev > 0 else 'erken'}"
+                    if key in ["avg_stress"]:
+                        interpretation = f"normalden {round(abs(dev),1)} std {'yüksek' if dev > 0 else 'düşük'}"
+                else:
+                    interpretation = f"normalden {round(abs(dev),1)} std {'fazla' if dev > 0 else 'az'}"
+
+                day["deviation_flags"].append({
+                    "metric":         key,
+                    "label":          label,
+                    "value":          val,
+                    "norm_mean":      norm.get("mean") if norm else None,
+                    "deviation":      dev,
+                    "direction":      direction,
+                    "severity":       severity,
+                    "interpretation": interpretation,
+                    "unit":           unit,
+                })
+
+    # ── Tahmin (gelecek 3 gün) ────────────────────────────────────────────────
+    def weighted_trend(vals, weights=None):
+        vals = [v for v in vals if v is not None and v > 0]
+        if not vals: return None, 0
+        if len(vals) < 2: return vals[-1], 0
+        if weights is None:
+            weights = list(range(1, len(vals) + 1))
+        weights = weights[-len(vals):]
+        total_w = sum(weights)
+        mean = sum(v * w for v, w in zip(vals, weights)) / total_w
+        # Lineer trend eğimi
+        n = len(vals)
+        mx = (n - 1) / 2
+        my = sum(vals) / n
+        num   = sum((i - mx) * (v - my) for i, v in enumerate(vals))
+        denom = sum((i - mx) ** 2 for i in range(n))
+        slope = num / denom if denom != 0 else 0
+        return round(mean, 2), round(slope, 3)
+
+    recent = active[-7:] if len(active) >= 7 else active
+    weights = list(range(1, len(recent) + 1))
+
+    predictions = []
+    for day_ahead in range(1, 4):
+        pred_date    = (datetime.now() + timedelta(days=day_ahead)).strftime("%d/%m")
+        pred_weekday = (datetime.now() + timedelta(days=day_ahead)).strftime("%A")
+        is_weekend   = pred_weekday in ["Saturday", "Sunday"]
+        pred_wday_tr = {"Monday":"Pzt","Tuesday":"Sal","Wednesday":"Çar",
+                        "Thursday":"Per","Friday":"Cum","Saturday":"Cmt","Sunday":"Paz"}.get(pred_weekday, pred_weekday)
+
+        pred = {"date": pred_date, "weekday": pred_wday_tr, "is_weekend": is_weekend}
+
+        for key, label, unit, higher_better in METRICS:
+            vals = [d.get(key) for d in recent]
+            base, slope = weighted_trend(vals, weights)
+            if base is not None:
+                predicted = base + slope * day_ahead
+                # Hafta sonu düzeltmeleri
+                if is_weekend:
+                    if key == "wake_hour":   predicted += 0.5
+                    if key == "sleep_hour":  predicted += 0.3
+                    if key == "exercise_mins": predicted *= 0.8
+                    if key == "steps":       predicted *= 0.85
+                    if key == "active_mins": predicted *= 0.85
+                # Sınır kontrolü
+                if key in ["avg_spo2"]:      predicted = max(90, min(100, predicted))
+                if key in ["avg_hr"]:        predicted = max(45, min(160, predicted))
+                if key in ["avg_stress"]:    predicted = max(5,  min(99,  predicted))
+                if key in ["wake_hour", "sleep_hour", "first_act_hour",
+                           "exercise_hour", "outdoor_hour",
+                           "first_meal_hour","last_meal_hour"]:
+                    predicted = max(0, min(24, predicted))
+                    h = int(predicted)
+                    m = int((predicted % 1) * 60)
+                    pred[key + "_str"] = f"{h:02d}:{m:02d}"
+                pred[key] = round(predicted, 2)
+            else:
+                pred[key] = None
+
+        # Norm ile karşılaştır
+        norm_key  = "weekend" if is_weekend else "weekday"
+        day_norms = norms.get(norm_key) or norms.get("all") or {}
+        pred["expected_deviations"] = {}
+        for key, label, unit, _ in METRICS:
+            norm = day_norms.get(key)
+            val  = pred.get(key)
+            pred["expected_deviations"][key] = deviation_score(val, norm)
+
+        # Güven seviyesi
+        pred["confidence"] = "yüksek" if len(recent) >= 7 else ("orta" if len(recent) >= 4 else "düşük")
+        predictions.append(pred)
+
+    # ── Genel anomali özeti ────────────────────────────────────────────────────
+    all_flags = []
+    for day in active:
+        for flag in day.get("deviation_flags", []):
+            all_flags.append({**flag, "date": day["label"], "weekday": day["weekday"]})
+
+    # En sık sapma gösteren metrikler
+    from collections import Counter
+    metric_counts = Counter(f["metric"] for f in all_flags)
+    frequent_deviations = [
+        {"metric": k, "label": next((m[1] for m in METRICS if m[0]==k), k),
+         "count": v, "pct": round(v/max(len(active),1)*100)}
+        for k, v in metric_counts.most_common(5)
+    ]
+
+    conn.close()
+    return jsonify({
+        "person":               dict(person),
+        "daily":                active,
+        "norms":                norms,
+        "predictions":          predictions,
+        "all_deviation_flags":  all_flags,
+        "frequent_deviations":  frequent_deviations,
+        "metrics_meta":         [{"key": k, "label": l, "unit": u} for k,l,u,_ in METRICS],
+    })
 
 @app.route("/api/daily_profile/<int:pid>", methods=["GET"])
 def get_daily_profile(pid):
@@ -1356,6 +1841,478 @@ def get_daily_profile(pid):
         "predictions": predictions,
     })
 
+
+# ── VERİ KATKISI: YENİ TABLOLAR ───────────────────────────────────────────────
+
+def init_contribution_tables(conn):
+    """Özel aktivite, izleme profili ve ortam profili tabloları"""
+    c = conn.cursor()
+    c.execute("""CREATE TABLE IF NOT EXISTS monitoring_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        profile_type TEXT DEFAULT 'insan',
+        environment TEXT DEFAULT 'genel',
+        description TEXT,
+        location TEXT,
+        icon TEXT DEFAULT '📍',
+        color TEXT DEFAULT '#534AB7',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        active INTEGER DEFAULT 1)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS custom_activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        environment TEXT DEFAULT 'genel',
+        hour_start INTEGER DEFAULT 8,
+        hour_end INTEGER DEFAULT 18,
+        duration_min INTEGER DEFAULT 10,
+        duration_max INTEGER DEFAULT 60,
+        frequency_per_day INTEGER DEFAULT 1,
+        hr_base INTEGER DEFAULT 75,
+        hr_noise INTEGER DEFAULT 8,
+        spo2_base REAL DEFAULT 98.0,
+        stress_base INTEGER DEFAULT 30,
+        icon TEXT DEFAULT '🔵',
+        color TEXT DEFAULT '#534AB7',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        active INTEGER DEFAULT 1)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS environments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT DEFAULT 'genel',
+        description TEXT,
+        location TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        active INTEGER DEFAULT 1)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS contribution_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER,
+        person_id INTEGER,
+        custom_activity_id INTEGER,
+        environment_id INTEGER,
+        profile_name TEXT,
+        profile_type TEXT,
+        activity_name TEXT,
+        environment_name TEXT,
+        environment_type TEXT,
+        start_time TEXT,
+        end_time TEXT,
+        duration_mins INTEGER,
+        heart_rate INTEGER,
+        spo2 REAL,
+        stress_level INTEGER,
+        hour_of_day INTEGER,
+        day_of_week INTEGER,
+        is_weekend INTEGER DEFAULT 0,
+        metadata TEXT,
+        recorded_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    conn.commit()
+
+# ── ÖZEL AKTİVİTE ENDPOINT'LERİ ───────────────────────────────────────────────
+
+@app.route("/api/monitoring_profiles", methods=["GET"])
+def get_monitoring_profiles():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM monitoring_profiles WHERE active=1 ORDER BY id").fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/monitoring_profiles", methods=["POST"])
+def add_monitoring_profile():
+    d    = request.json
+    name = d.get("name","").strip()
+    if not name: return jsonify({"error":"İsim zorunlu"}), 400
+    conn = get_db(); c = conn.cursor()
+    c.execute("""INSERT INTO monitoring_profiles
+        (name, profile_type, environment, description, location, icon, color)
+        VALUES (?,?,?,?,?,?,?)""",
+        (name,
+         d.get("profile_type","insan"),
+         d.get("environment","genel"),
+         d.get("description",""),
+         d.get("location",""),
+         d.get("icon","📍"),
+         d.get("color","#534AB7")))
+    conn.commit()
+    pid = c.lastrowid
+    conn.close()
+    return jsonify({"id": pid, "name": name}), 201
+
+@app.route("/api/monitoring_profiles/<int:pid>", methods=["DELETE"])
+def delete_monitoring_profile(pid):
+    conn = get_db()
+    conn.execute("UPDATE monitoring_profiles SET active=0 WHERE id=?", (pid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+@app.route("/api/custom_activities", methods=["GET"])
+def get_custom_activities():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM custom_activities WHERE active=1 ORDER BY id").fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/custom_activities", methods=["POST"])
+def add_custom_activity():
+    d    = request.json
+    name = d.get("name","").strip()
+    if not name: return jsonify({"error":"İsim zorunlu"}), 400
+    conn = get_db(); c = conn.cursor()
+    c.execute("""INSERT INTO custom_activities
+        (name,description,environment,hour_start,hour_end,
+         duration_min,duration_max,frequency_per_day,
+         hr_base,hr_noise,spo2_base,stress_base,icon,color)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (name,
+         d.get("description",""),
+         d.get("environment","genel"),
+         int(d.get("hour_start",8)),
+         int(d.get("hour_end",18)),
+         int(d.get("duration_min",10)),
+         int(d.get("duration_max",60)),
+         int(d.get("frequency_per_day",1)),
+         int(d.get("hr_base",75)),
+         int(d.get("hr_noise",8)),
+         float(d.get("spo2_base",98.0)),
+         int(d.get("stress_base",30)),
+         d.get("icon","🔵"),
+         d.get("color","#534AB7")))
+    conn.commit()
+    aid = c.lastrowid
+    conn.close()
+    return jsonify({"id": aid, "name": name}), 201
+
+@app.route("/api/custom_activities/<int:aid>", methods=["DELETE"])
+def delete_custom_activity(aid):
+    conn = get_db()
+    conn.execute("UPDATE custom_activities SET active=0 WHERE id=?", (aid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+# ── ORTAM PROFİLİ ENDPOINT'LERİ ───────────────────────────────────────────────
+
+@app.route("/api/environments", methods=["GET"])
+def get_environments():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM environments WHERE active=1 ORDER BY id").fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/environments", methods=["POST"])
+def add_environment():
+    d    = request.json
+    name = d.get("name","").strip()
+    if not name: return jsonify({"error":"İsim zorunlu"}), 400
+    conn = get_db(); c = conn.cursor()
+    c.execute("INSERT INTO environments (name,type,description,location) VALUES (?,?,?,?)",
+        (name, d.get("type","genel"), d.get("description",""), d.get("location","")))
+    conn.commit()
+    eid = c.lastrowid
+    conn.close()
+    return jsonify({"id": eid, "name": name}), 201
+
+@app.route("/api/environments/<int:eid>", methods=["DELETE"])
+def delete_environment(eid):
+    conn = get_db()
+    conn.execute("UPDATE environments SET active=0 WHERE id=?", (eid,))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True})
+
+# ── VERİ KATKISI: SİMÜLASYON & KAYIT ─────────────────────────────────────────
+
+@app.route("/api/contribute/simulate", methods=["POST"])
+def simulate_contribution():
+    """
+    Seçilen izleme profili + özel aktivite için tarih aralığında
+    simüle edilmiş veri üretir ve contribution_log'a kaydeder.
+    """
+    import json as _json
+    d      = request.json
+    mpid   = int(d.get("profile_id", 0))
+    aid    = int(d.get("activity_id", 0))
+    date_start = d.get("date_start")
+    date_end   = d.get("date_end")
+
+    conn = get_db()
+
+    profile = conn.execute("SELECT * FROM monitoring_profiles WHERE id=? AND active=1", (mpid,)).fetchone()
+    if not profile:
+        conn.close()
+        return jsonify({"error": "İzleme profili bulunamadı"}), 404
+
+    act = conn.execute("SELECT * FROM custom_activities WHERE id=? AND active=1", (aid,)).fetchone()
+    if not act:
+        conn.close()
+        return jsonify({"error": "Aktivite bulunamadı"}), 404
+
+    # Tarih aralığı
+    try:
+        start_date = datetime.strptime(date_start, "%Y-%m-%d") if date_start else datetime.now() - timedelta(days=7)
+        end_date   = datetime.strptime(date_end,   "%Y-%m-%d") if date_end   else datetime.now()
+    except:
+        start_date = datetime.now() - timedelta(days=7)
+        end_date   = datetime.now()
+
+    # Max 90 gün
+    if (end_date - start_date).days > 90:
+        end_date = start_date + timedelta(days=90)
+
+    now     = datetime.now()
+    records = []
+    current = start_date
+
+    while current <= end_date:
+        weekday    = current.weekday()
+        is_weekend = 1 if weekday >= 5 else 0
+        freq       = act["frequency_per_day"]
+        hour_range = max(1, act["hour_end"] - act["hour_start"])
+        interval   = max(1, hour_range // max(freq, 1))
+
+        for i in range(freq):
+            base_hour  = act["hour_start"] + i * interval
+            jitter_min = random.randint(-15, 15)
+            start_dt   = current.replace(hour=min(base_hour,23), minute=0, second=0) + timedelta(minutes=jitter_min)
+            dur_mins   = random.randint(act["duration_min"], act["duration_max"])
+            end_dt     = start_dt + timedelta(minutes=dur_mins)
+
+            hr     = int(noisy(act["hr_base"],     act["hr_noise"], 40, 200))
+            spo2   = round(noisy(act["spo2_base"], 0.5, 88, 100), 1)
+            stress = int(noisy(act["stress_base"], 10,  5, 99))
+
+            metadata = _json.dumps({
+                "profile_name": profile["name"],
+                "profile_type": profile["profile_type"],
+                "environment":  profile["environment"],
+                "location":     profile["location"] or "",
+                "activity":     act["name"],
+                "duration_mins": dur_mins,
+                "day_of_week":  weekday,
+                "is_weekend":   is_weekend,
+            }, ensure_ascii=False)
+
+            conn.execute("""INSERT INTO contribution_log
+                (profile_id, custom_activity_id,
+                 profile_name, profile_type,
+                 activity_name, environment_name, environment_type,
+                 start_time, end_time, duration_mins,
+                 heart_rate, spo2, stress_level,
+                 hour_of_day, day_of_week, is_weekend,
+                 metadata, recorded_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (mpid, aid,
+                 profile["name"], profile["profile_type"],
+                 act["name"],
+                 profile["environment"], profile["profile_type"],
+                 start_dt.isoformat(), end_dt.isoformat(), dur_mins,
+                 hr, spo2, stress,
+                 base_hour, weekday, is_weekend,
+                 metadata, now.isoformat()))
+            records.append({
+                "date":          start_dt.strftime("%d/%m"),
+                "start":         start_dt.strftime("%H:%M"),
+                "duration_mins": dur_mins,
+                "heart_rate":    hr,
+                "spo2":          spo2,
+                "stress_level":  stress,
+            })
+        current += timedelta(days=1)
+
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "records_added": len(records), "preview": records[:5]})
+
+
+@app.route("/api/contribute/pattern/<int:mpid>", methods=["GET"])
+def contribute_pattern(mpid):
+    """İzleme profiline ait verinin sapma analizi"""
+    import statistics, json as _json
+    conn = get_db()
+
+    profile = conn.execute("SELECT * FROM monitoring_profiles WHERE id=?", (mpid,)).fetchone()
+    if not profile:
+        conn.close()
+        return jsonify({"error": "Profil bulunamadı"}), 404
+
+    rows = conn.execute("""
+        SELECT activity_name, start_time, end_time, duration_mins,
+               heart_rate, spo2, stress_level, hour_of_day, day_of_week, is_weekend
+        FROM contribution_log WHERE profile_id=?
+        ORDER BY start_time ASC
+    """, (mpid,)).fetchall()
+
+    if not rows:
+        conn.close()
+        return jsonify({"error": "Bu profil için henüz veri yok"}), 404
+
+    # Aktivite bazlı grupla
+    from collections import defaultdict
+    by_activity = defaultdict(list)
+    for r in rows:
+        by_activity[r["activity_name"]].append(dict(r))
+
+    activity_stats = []
+    all_alerts = []
+
+    for act_name, recs in by_activity.items():
+        hrs      = [r["heart_rate"]    for r in recs if r["heart_rate"]]
+        spo2s    = [r["spo2"]          for r in recs if r["spo2"]]
+        stresses = [r["stress_level"]  for r in recs if r["stress_level"]]
+        durs     = [r["duration_mins"] for r in recs if r["duration_mins"]]
+        hours    = [r["hour_of_day"]   for r in recs if r["hour_of_day"] is not None]
+
+        def stat(vals):
+            if len(vals) < 2: return {"mean": vals[0] if vals else 0,"std":0,"min":vals[0] if vals else 0,"max":vals[0] if vals else 0}
+            m = sum(vals)/len(vals)
+            s = statistics.stdev(vals)
+            return {"mean":round(m,1),"std":round(s,1),"min":round(min(vals),1),"max":round(max(vals),1),
+                    "low":round(m-s,1),"high":round(m+s,1),"n":len(vals)}
+
+        hr_stat  = stat(hrs)
+        spo2_stat= stat(spo2s)
+        str_stat = stat(stresses)
+        dur_stat = stat(durs)
+        hr_stat  = stat(hrs)
+
+        # Günlük zaman serisi
+        daily = defaultdict(list)
+        for r in recs:
+            try:
+                day = datetime.fromisoformat(r["start_time"]).strftime("%d/%m")
+                daily[day].append(r)
+            except: pass
+
+        daily_series = []
+        for day, drecs in sorted(daily.items()):
+            avg_hr  = round(sum(r["heart_rate"]   for r in drecs)/len(drecs),1)
+            avg_sp  = round(sum(r["spo2"]         for r in drecs)/len(drecs),1)
+            avg_st  = round(sum(r["stress_level"] for r in drecs)/len(drecs),1)
+            avg_dur = round(sum(r["duration_mins"]for r in drecs)/len(drecs),1)
+
+            # Sapma hesapla
+            deviations = {}
+            for key, val, norm in [
+                ("heart_rate", avg_hr,  hr_stat),
+                ("spo2",       avg_sp,  spo2_stat),
+                ("stress",     avg_st,  str_stat),
+                ("duration",   avg_dur, dur_stat),
+            ]:
+                if norm["std"] > 0:
+                    dev = round((val - norm["mean"]) / norm["std"], 2)
+                    deviations[key] = dev
+                    if abs(dev) >= 1.5:
+                        severity = "kritik" if abs(dev) >= 2.5 else "uyarı"
+                        all_alerts.append({
+                            "date":      day,
+                            "activity":  act_name,
+                            "metric":    key,
+                            "value":     val,
+                            "norm_mean": norm["mean"],
+                            "deviation": dev,
+                            "severity":  severity,
+                            "profile":   profile["name"],
+                        })
+                else:
+                    deviations[key] = 0
+
+            daily_series.append({
+                "date": day, "avg_hr": avg_hr, "avg_spo2": avg_sp,
+                "avg_stress": avg_st, "avg_duration": avg_dur,
+                "deviations": deviations, "count": len(drecs),
+            })
+
+        activity_stats.append({
+            "activity_name": act_name,
+            "record_count":  len(recs),
+            "hr_stat":       hr_stat,
+            "spo2_stat":     spo2_stat,
+            "stress_stat":   str_stat,
+            "duration_stat": dur_stat,
+            "daily_series":  daily_series,
+        })
+
+    conn.close()
+    return jsonify({
+        "profile":          dict(profile),
+        "activity_stats":   activity_stats,
+        "alerts":           sorted(all_alerts, key=lambda x: abs(x["deviation"]), reverse=True)[:20],
+        "total_records":    len(rows),
+    })
+
+@app.route("/api/contribute/export", methods=["GET"])
+def export_contribution():
+    """Katkı verilerini zengin metadata ile CSV olarak dışa aktar"""
+    from flask import Response
+    import csv, io, unicodedata
+
+    pid = request.args.get("person_id", type=int)
+    eid = request.args.get("environment_id", type=int)
+
+    conn = get_db()
+    query = "SELECT * FROM contribution_log WHERE 1=1"
+    params = []
+    if pid:
+        query += " AND person_id=?"; params.append(pid)
+    if eid:
+        query += " AND environment_id=?"; params.append(eid)
+    query += " ORDER BY start_time DESC LIMIT 5000"
+
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "person_id","activity_name","environment_name","environment_type",
+        "start_time","end_time","duration_mins",
+        "heart_rate","spo2","stress_level",
+        "hour_of_day","day_of_week","is_weekend",
+        "metadata"
+    ])
+    for r in rows:
+        writer.writerow([
+            r["person_id"], r["activity_name"], r["environment_name"], r["environment_type"],
+            r["start_time"], r["end_time"], r["duration_mins"],
+            r["heart_rate"], r["spo2"], r["stress_level"],
+            r["hour_of_day"], r["day_of_week"], r["is_weekend"],
+            r["metadata"]
+        ])
+
+    output.seek(0)
+    filename = unicodedata.normalize('NFKD','katki_verisi.csv').encode('ascii','ignore').decode()
+    return Response("﻿" + output.getvalue(),
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=" + filename})
+
+@app.route("/api/contribute/stats", methods=["GET"])
+def contribution_stats():
+    """Katkı veri seti istatistikleri"""
+    conn = get_db()
+    total = conn.execute("SELECT COUNT(*) as n FROM contribution_log").fetchone()["n"]
+    by_activity = conn.execute("""
+        SELECT activity_name, COUNT(*) as cnt,
+               ROUND(AVG(heart_rate),1) as avg_hr,
+               ROUND(AVG(spo2),1) as avg_spo2,
+               ROUND(AVG(stress_level),1) as avg_stress,
+               ROUND(AVG(duration_mins),1) as avg_dur
+        FROM contribution_log GROUP BY activity_name ORDER BY cnt DESC
+    """).fetchall()
+    by_env = conn.execute("""
+        SELECT environment_name, environment_type, COUNT(*) as cnt
+        FROM contribution_log GROUP BY environment_name ORDER BY cnt DESC
+    """).fetchall()
+    by_hour = conn.execute("""
+        SELECT hour_of_day, COUNT(*) as cnt
+        FROM contribution_log GROUP BY hour_of_day ORDER BY hour_of_day
+    """).fetchall()
+    conn.close()
+    return jsonify({
+        "total_records":  total,
+        "by_activity":    [dict(r) for r in by_activity],
+        "by_environment": [dict(r) for r in by_env],
+        "by_hour":        [dict(r) for r in by_hour],
+    })
+
+
 @app.route("/api/analysis/<int:pid>", methods=["GET"])
 def get_analysis(pid):
     days_back = int(request.args.get("days", 14))
@@ -1500,19 +2457,18 @@ def get_analysis(pid):
 
     # Kişi bazlı uyku düzensizlik skoru
     wake_hours = []
-    for d in days_data:
-     for r in d["sleep_records"]:
-        end = r.get("end","")
-        if not end or end == "—":
-            continue
-        try:
-            # "07:37" formatı veya tam ISO string olabilir
-            if len(end) <= 5:  # sadece "HH:MM"
-                wake_hours.append(int(end.split(":")[0]))
-            else:
-                wake_hours.append(datetime.fromisoformat(end).hour)
-        except:
-            pass
+    for _d in days_data:
+        for _r in _d["sleep_records"]:
+            _end = _r.get("end","")
+            if not _end or _end == "—":
+                continue
+            try:
+                if len(_end) <= 5:
+                    wake_hours.append(int(_end.split(":")[0]))
+                else:
+                    wake_hours.append(datetime.fromisoformat(_end).hour)
+            except:
+                pass
     sleep_irregularity = round(max(wake_hours) - min(wake_hours), 1) if len(wake_hours) >= 2 else 0
 
     # Akıllı uyarılar

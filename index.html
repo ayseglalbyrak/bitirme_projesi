@@ -406,6 +406,7 @@ tr:last-child td{border-bottom:none;}
     <button class="tab"        onclick="switchTab('analysis',this)"  id="tab-btn-analysis">📊 Analiz</button>
     <button class="tab"        onclick="switchTab('alerts',this)"   id="tab-btn-alerts">🔔 Akıllı Uyarılar</button>
     <button class="tab"        onclick="switchTab('timeline',this)" id="tab-btn-timeline">⏰ Zaman Çizelgesi</button>
+    <button class="tab"        onclick="switchTab('contribute',this)" id="tab-btn-contribute">➕ Veri Katkısı</button>
   </div>
 
   <!-- KİŞİ KARTLARI -->
@@ -478,6 +479,10 @@ tr:last-child td{border-bottom:none;}
           <button class="btn btn-primary btn-sm" onclick="downloadAnalysisPDF()">📄 PDF Rapor</button>
           <button class="btn btn-sm" onclick="loadDailyProfile()"
             style="background:var(--accent);color:#fff">🔬 Günlük Profil & Tahmin</button>
+          <button class="btn btn-sm" onclick="toggleDistPanel()"
+            style="background:#378add;color:#fff">📊 Dağılım Ayarları</button>
+          <button class="btn btn-sm" onclick="loadPatternAnalysis()"
+            style="background:#1d9e75;color:#fff">📐 Örüntü & Sapma Analizi</button>
           <div style="display:flex;gap:4px;">
             <button class="btn btn-sm" onclick="exportData('activity')"
               style="background:var(--green);color:#fff;font-size:10px">📊 Aktivite CSV</button>
@@ -489,9 +494,27 @@ tr:last-child td{border-bottom:none;}
           <span id="analysis-loading" style="font-size:11px;color:var(--text3);display:none">Yükleniyor...</span>
         </div>
       </div>
+      <!-- Dağılım Ayarları Paneli -->
+      <div id="dist-panel" style="display:none;background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px">📊 Metrik Bazlı Dağılım Ayarları</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:12px">
+          Her metrik için veri üretiminde kullanılacak istatistiksel dağılımı ve parametrelerini ayarlayın.
+          Simülasyon bu ayarları kullanarak gerçekçi veri üretir.
+        </div>
+        <div id="dist-settings-area"></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-primary" onclick="saveDistSettings()">💾 Kaydet</button>
+          <button class="btn btn-sm" onclick="previewDistribution()" style="background:var(--surface2);color:var(--text)">👁 Önizle</button>
+          <button class="btn btn-sm" onclick="resetDistSettings()" style="background:var(--surface2);color:var(--text)">↺ Varsayılana Dön</button>
+        </div>
+        <div id="dist-preview-area" style="margin-top:10px"></div>
+      </div>
+
       <div id="analysis-content"><div class="empty-state">Kişi seçin</div></div>
-      <!-- Günlük profil paneli — ayrı bölüm -->
+      <!-- Günlük profil paneli -->
       <div id="daily-profile-content" style="margin-top:14px"></div>
+      <!-- Örüntü analizi paneli -->
+      <div id="pattern-analysis-content" style="margin-top:14px"></div>
     </div>
   </div>
 
@@ -502,6 +525,130 @@ tr:last-child td{border-bottom:none;}
       <div id="alerts-list"><div class="empty-state">Yükleniyor...</div></div>
     </div>
   </div>
+
+  <!-- VERİ KATKISI -->
+  <div id="tab-contribute" style="display:none">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+
+      <!-- İzleme Profili -->
+      <div style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px">🏷 İzleme Profili Ekle</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <input class="live-select" id="mp-name" placeholder="Profil adı (ör: Üretim Hattı A, Koğuş 3)" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/>
+          <select class="live-select" id="mp-type" style="width:100%">
+            <option value="insan">👤 İnsan</option>
+            <option value="makine">⚙️ Makine / Ekipman</option>
+            <option value="alan">📐 Alan / Bölge</option>
+            <option value="surec">🔄 Süreç / Hat</option>
+            <option value="hasta">🏥 Hasta / Hasta Grubu</option>
+            <option value="diger">📌 Diğer</option>
+          </select>
+          <select class="live-select" id="mp-env" style="width:100%">
+            <option value="ev">🏠 Ev</option>
+            <option value="ofis">💼 Ofis</option>
+            <option value="fabrika">🏭 Fabrika</option>
+            <option value="hastane">🏥 Hastane</option>
+            <option value="okul">🏫 Okul</option>
+            <option value="spor">🏋 Spor Tesisi</option>
+            <option value="dis_mekan">🌳 Dış Mekan</option>
+            <option value="genel">📍 Genel</option>
+          </select>
+          <input class="live-select" id="mp-desc" placeholder="Açıklama (isteğe bağlı)" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/>
+          <input class="live-select" id="mp-loc" placeholder="Konum (ör: İstanbul, Fabrika Binası)" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/>
+          <button class="btn btn-primary btn-sm" onclick="addMonitoringProfile()">+ Profil Ekle</button>
+        </div>
+        <div id="mp-list" style="margin-top:12px;max-height:160px;overflow-y:auto"></div>
+      </div>
+
+      <!-- Özel Aktivite -->
+      <div style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px">⚡ Özel Aktivite Tanımla</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <input class="live-select" id="act-name" placeholder="Aktivite adı" style="grid-column:1/-1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/>
+          <input class="live-select" id="act-desc" placeholder="Açıklama (isteğe bağlı)" style="grid-column:1/-1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/>
+          <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Başlangıç saati</div>
+            <input type="number" class="live-select" id="act-hour-start" value="8" min="0" max="23" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/></div>
+          <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Bitiş saati</div>
+            <input type="number" class="live-select" id="act-hour-end" value="17" min="0" max="23" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/></div>
+          <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Min süre (dk)</div>
+            <input type="number" class="live-select" id="act-dur-min" value="10" min="1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/></div>
+          <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Max süre (dk)</div>
+            <input type="number" class="live-select" id="act-dur-max" value="30" min="1" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/></div>
+          <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Günde kaç kez</div>
+            <input type="number" class="live-select" id="act-freq" value="2" min="1" max="50" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/></div>
+          <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Nabız bazı (bpm) <span style="color:var(--text3)">opsiyonel</span></div>
+            <input type="number" class="live-select" id="act-hr" placeholder="ör: 85" min="40" max="200" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/></div>
+          <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">Stres bazı (/100) <span style="color:var(--text3)">opsiyonel</span></div>
+            <input type="number" class="live-select" id="act-stress" placeholder="ör: 40" min="5" max="99" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/></div>
+          <div><div style="font-size:10px;color:var(--text2);margin-bottom:2px">SpO₂ bazı (%) <span style="color:var(--text3)">opsiyonel</span></div>
+            <input type="number" class="live-select" id="act-spo2" placeholder="ör: 97" min="85" max="100" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/></div>
+          <div style="grid-column:1/-1">
+            <div style="font-size:10px;color:var(--text2);margin-bottom:4px">📊 Veri Dağılımı</div>
+            <select class="live-select" id="act-distribution" onchange="updateDistParams()" style="width:100%;margin-bottom:6px">
+              <option value="normal">Normal (Gaussian) — μ, σ</option>
+              <option value="uniform">Düzgün (Uniform) — alt, üst</option>
+              <option value="exponential">Üstel (Exponential) — ölçek, başlangıç</option>
+              <option value="poisson">Poisson — λ</option>
+              <option value="lognormal">Log-Normal — μ(log), σ(log)</option>
+              <option value="triangular">Üçgen (Triangular) — alt, tepe, üst</option>
+              <option value="beta">Beta — α, β, ölçek</option>
+            </select>
+            <div id="dist-params-area" style="display:grid;grid-template-columns:1fr 1fr;gap:6px"></div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:flex-end">
+            <div style="flex:1"><div style="font-size:10px;color:var(--text2);margin-bottom:2px">İkon</div>
+              <input class="live-select" id="act-icon" value="🔵" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--surface2);background:var(--surface2);color:var(--text);font-size:16px"/></div>
+            <button class="btn btn-primary btn-sm" onclick="addCustomActivity()" style="white-space:nowrap">+ Ekle</button>
+          </div>
+        </div>
+        <div id="act-list" style="margin-top:10px;max-height:120px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- Veri Üret -->
+    <div style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px">🔄 Veri Üret & Kaydet</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:3px">İzleme Profili</div>
+          <select class="live-select" id="contrib-profile-select" style="min-width:180px">
+            <option value="">— Profil Seç —</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Aktivite</div>
+          <select class="live-select" id="contrib-activity-select" style="min-width:180px">
+            <option value="">— Aktivite Seç —</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Başlangıç Tarihi</div>
+          <input type="date" class="live-select" id="contrib-date-start" style="padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Bitiş Tarihi</div>
+          <input type="date" class="live-select" id="contrib-date-end" style="padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"/>
+        </div>
+        <button class="btn btn-primary" onclick="simulateContribution()">▶ Veri Üret</button>
+        <button class="btn btn-sm" onclick="exportContribution()" style="background:var(--green);color:#fff">⬇ CSV İndir</button>
+        <button class="btn btn-sm" onclick="analyzeContribution()" style="background:#534AB7;color:#fff">📐 Sapma Analizi</button>
+      </div>
+      <div id="contrib-result" style="margin-top:12px"></div>
+    </div>
+
+    <!-- Sapma Analizi Sonuçları -->
+    <div id="contrib-analysis" style="margin-bottom:14px"></div>
+
+    <!-- İstatistikler -->
+    <div style="background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700">📊 Katkı Veri Seti İstatistikleri</div>
+        <button class="btn btn-sm" onclick="loadContribStats()" style="font-size:11px">Yenile</button>
+      </div>
+      <div id="contrib-stats"><div style="color:var(--text3);font-size:12px">Veri ürettikten sonra burada istatistikler görünür.</div></div>
+    </div>
+  </div>
+
 
   <!-- ZAMANÇİZELGESİ -->
   <div id="tab-timeline" style="display:none">
@@ -731,7 +878,7 @@ let mapInited = false;
 function switchTab(tab, btn){
   document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
   btn.classList.add("active");
-  ["cards","live","map","compare","anomalies","weekly","analysis","alerts","timeline"].forEach(t=>{
+  ["cards","live","map","compare","anomalies","weekly","analysis","alerts","timeline","contribute"].forEach(t=>{
     const el=document.getElementById("tab-"+t);
     if(el) el.style.display = t===tab?"":"none";
   });
@@ -740,7 +887,8 @@ function switchTab(tab, btn){
   if(tab==="live")     initLiveChart();
   if(tab==="analysis") loadAnalysis();
   if(tab==="alerts")   loadSmartAlerts();
-  if(tab==="timeline") loadTimeline();
+  if(tab==="timeline")   loadTimeline();
+  if(tab==="contribute") loadContributeTab();
 }
 
 // ── STATE ────────────────────────────────────────────────────────────────────
@@ -1261,7 +1409,7 @@ function renderSummary(s){
 
 // ── SELECT GÜNCELLEME ────────────────────────────────────────────────────────
 function syncPersonSelects(persons){
-  ["live-person-select","weekly-person-select","analysis-person-select","timeline-person-select"].forEach(selId=>{
+  ["live-person-select","weekly-person-select","analysis-person-select","timeline-person-select","contrib-person-select"].forEach(selId=>{
     const sel = document.getElementById(selId); if(!sel) return;
     const prev = sel.value;
     sel.innerHTML = persons.map(p=>`<option value="${p.id}">${p.name}</option>`).join("");
@@ -1958,6 +2106,430 @@ async function downloadAnalysisPDF(){
   showToast("PDF rapor indirildi","ok");
 }
 
+// ── DAĞILIM AYARLARI ─────────────────────────────────────────────────────────
+
+const DIST_DEFS = {
+  normal:      {label:"Normal (Gaussian)",  params:[{key:"mean",label:"Ortalama (μ)",default:75},{key:"std",label:"Std Sapma (σ)",default:10}]},
+  uniform:     {label:"Düzgün (Uniform)",   params:[{key:"low",label:"Alt Sınır",default:60},{key:"high",label:"Üst Sınır",default:90}]},
+  exponential: {label:"Üstel (Exponential)",params:[{key:"scale",label:"Ölçek (1/λ)",default:20},{key:"offset",label:"Başlangıç",default:0}]},
+  poisson:     {label:"Poisson",            params:[{key:"lam",label:"Lambda (λ)",default:5}]},
+  lognormal:   {label:"Log-Normal",         params:[{key:"mean",label:"μ (log)",default:4.3},{key:"sigma",label:"σ (log)",default:0.5}]},
+  triangular:  {label:"Üçgen (Triangular)", params:[{key:"low",label:"Alt",default:50},{key:"mode",label:"Tepe",default:75},{key:"high",label:"Üst",default:100}]},
+  beta:        {label:"Beta",               params:[{key:"alpha",label:"α",default:2},{key:"beta",label:"β",default:5},{key:"scale",label:"Ölçek",default:100}]},
+};
+
+const METRIC_LABELS = {
+  heart_rate:  {label:"Nabız (bpm)",      icon:"❤️", min:40,  max:200},
+  spo2:        {label:"SpO₂ (%)",         icon:"🫁", min:88,  max:100},
+  skin_temp:   {label:"Cilt Sıcaklığı",   icon:"🌡", min:34,  max:40},
+  hrv:         {label:"HRV",             icon:"💓", min:5,   max:100},
+  stress:      {label:"Stres (/100)",     icon:"🧠", min:5,   max:99},
+  steps:       {label:"Adım Sayısı",      icon:"🚶", min:0,   max:30000},
+  sleep_mins:  {label:"Uyku Süresi (dk)", icon:"😴", min:0,   max:720},
+  active_mins: {label:"Aktif Süre (dk)",  icon:"⏱", min:0,   max:480},
+};
+
+let currentDistSettings = {};
+
+async function loadDistSettings(){
+  const res  = await fetch(API+"/distributions");
+  const data = await res.json();
+  currentDistSettings = {};
+  data.forEach(d=>{
+    try{ currentDistSettings[d.metric] = {distribution:d.distribution, params:JSON.parse(d.params)}; }
+    catch(e){ currentDistSettings[d.metric] = {distribution:"normal",params:{}}; }
+  });
+  renderDistSettings();
+}
+
+function renderDistSettings(){
+  const area = document.getElementById("dist-settings-area");
+  if(!area) return;
+  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  Object.entries(METRIC_LABELS).forEach(([metric, meta])=>{
+    const cur  = currentDistSettings[metric] || {distribution:"normal",params:{}};
+    const opts = Object.entries(DIST_DEFS).map(([k,v])=>
+      `<option value="${k}" ${cur.distribution===k?"selected":""}>${v.label}</option>`).join("");
+    const paramDef = DIST_DEFS[cur.distribution]?.params || [];
+    const paramHtml = paramDef.map(p=>{
+      const val = cur.params[p.key] !== undefined ? cur.params[p.key] : p.default;
+      return `<div style="display:flex;align-items:center;gap:4px;font-size:10px">
+        <span style="color:var(--text2);white-space:nowrap;min-width:70px">${p.label}</span>
+        <input type="number" step="any" value="${val}"
+          id="dp-${metric}-${p.key}"
+          style="width:70px;padding:3px 5px;border-radius:4px;border:1px solid var(--border);
+          background:var(--surface2);color:var(--text);font-size:11px"/>
+      </div>`;
+    }).join("");
+    html += `<div style="background:var(--surface2);border-radius:8px;padding:10px">
+      <div style="font-size:11px;font-weight:700;margin-bottom:6px">${meta.icon} ${meta.label}</div>
+      <select id="ds-${metric}" onchange="onDistChange('${metric}')"
+        style="width:100%;font-size:11px;padding:4px;border-radius:4px;border:1px solid var(--border);
+        background:var(--surface2);color:var(--text);margin-bottom:6px">${opts}</select>
+      <div id="dparams-${metric}">${paramHtml}</div>
+    </div>`;
+  });
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+function onDistChange(metric){
+  const sel  = document.getElementById("ds-"+metric);
+  const dist = sel.value;
+  const paramDef = DIST_DEFS[dist]?.params || [];
+  const cur  = currentDistSettings[metric] || {params:{}};
+  const paramHtml = paramDef.map(p=>{
+    const val = cur.params[p.key] !== undefined ? cur.params[p.key] : p.default;
+    return `<div style="display:flex;align-items:center;gap:4px;font-size:10px">
+      <span style="color:var(--text2);white-space:nowrap;min-width:70px">${p.label}</span>
+      <input type="number" step="any" value="${val}"
+        id="dp-${metric}-${p.key}"
+        style="width:70px;padding:3px 5px;border-radius:4px;border:1px solid var(--border);
+        background:var(--surface2);color:var(--text);font-size:11px"/>
+    </div>`;
+  }).join("");
+  document.getElementById("dparams-"+metric).innerHTML = paramHtml;
+}
+
+async function saveDistSettings(){
+  const items = [];
+  Object.keys(METRIC_LABELS).forEach(metric=>{
+    const selEl = document.getElementById("ds-"+metric);
+    if(!selEl) return;
+    const dist     = selEl.value;
+    const paramDef = DIST_DEFS[dist]?.params || [];
+    const params   = {};
+    paramDef.forEach(p=>{
+      const el = document.getElementById("dp-"+metric+"-"+p.key);
+      if(el) params[p.key] = parseFloat(el.value) || p.default;
+    });
+    items.push({metric, distribution:dist, params});
+    currentDistSettings[metric] = {distribution:dist, params};
+  });
+  await fetch(API+"/distributions",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(items)});
+  showToast("Dağılım ayarları kaydedildi — simülasyon güncellendi","ok");
+}
+
+async function previewDistribution(){
+  // İlk metriğin önizlemesini göster
+  const metric   = Object.keys(METRIC_LABELS)[0];
+  const selEl    = document.getElementById("ds-"+metric);
+  if(!selEl) return;
+  const dist     = selEl.value;
+  const paramDef = DIST_DEFS[dist]?.params||[];
+  const params   = {};
+  paramDef.forEach(p=>{ const el=document.getElementById("dp-"+metric+"-"+p.key); if(el) params[p.key]=parseFloat(el.value)||p.default; });
+  const meta = METRIC_LABELS[metric];
+
+  const res  = await fetch(API+"/distributions/preview",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({distribution:dist,params,min_v:meta.min,max_v:meta.max})});
+  const data = await res.json();
+
+  const area = document.getElementById("dist-preview-area");
+  if(!area) return;
+  area.innerHTML = `<div style="font-size:11px;color:var(--text2);margin-bottom:6px">
+    Önizleme: ${meta.icon} ${meta.label} — ${DIST_DEFS[dist]?.label} (100 örnek)
+    &nbsp; Ort: <strong>${data.mean}</strong> &nbsp; Std: <strong>${data.std}</strong>
+    &nbsp; Min: <strong>${data.min}</strong> &nbsp; Max: <strong>${data.max}</strong>
+  </div>
+  <div style="display:flex;gap:1px;align-items:flex-end;height:60px;background:var(--surface2);border-radius:6px;padding:4px">
+    ${buildMiniHistogram(data.samples, meta.min, meta.max)}
+  </div>`;
+}
+
+function buildMiniHistogram(samples, minV, maxV){
+  const bins = 20;
+  const counts = Array(bins).fill(0);
+  const range  = (maxV - minV) || 1;
+  samples.forEach(v=>{
+    const idx = Math.min(bins-1, Math.floor((v-minV)/range*bins));
+    if(idx >= 0) counts[idx]++;
+  });
+  const maxC = Math.max(...counts) || 1;
+  return counts.map(c=>{
+    const h = Math.round(c/maxC*52);
+    return `<div style="flex:1;height:${h}px;background:var(--accent);border-radius:1px;opacity:0.7"></div>`;
+  }).join("");
+}
+
+function toggleDistPanel(){
+  const panel = document.getElementById("dist-panel");
+  if(!panel) return;
+  if(panel.style.display==="none"){
+    panel.style.display="block";
+    loadDistSettings();
+  } else {
+    panel.style.display="none";
+  }
+}
+
+async function resetDistSettings(){
+  if(!confirm("Tüm dağılım ayarları varsayılana döndürülecek. Emin misin?")) return;
+  const defaults = [
+    {metric:"heart_rate", distribution:"normal",     params:{mean:75,  std:10}},
+    {metric:"spo2",       distribution:"normal",     params:{mean:97.5,std:0.8}},
+    {metric:"skin_temp",  distribution:"normal",     params:{mean:36.5,std:0.2}},
+    {metric:"hrv",        distribution:"normal",     params:{mean:45,  std:12}},
+    {metric:"stress",     distribution:"exponential",params:{scale:25, offset:5}},
+    {metric:"steps",      distribution:"lognormal",  params:{mean:8.2, sigma:0.9}},
+    {metric:"sleep_mins", distribution:"triangular", params:{low:300,  mode:450,high:560}},
+    {metric:"active_mins",distribution:"normal",     params:{mean:60,  std:25}},
+  ];
+  await fetch(API+"/distributions",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(defaults)});
+  loadDistSettings();
+  showToast("Varsayılan ayarlara döndürüldü","ok");
+}
+
+// ── ÖRÜNTÜ & SAPMA ANALİZİ ──────────────────────────────────────────────────
+let patternCharts = {};
+
+async function loadPatternAnalysis(){
+  const sel  = document.getElementById("analysis-person-select");
+  const pid  = parseInt(sel.value);
+  if(!pid){ showToast("Önce kişi seçin","warn"); return; }
+  const days = document.getElementById("analysis-days-select").value || 14;
+  const el   = document.getElementById("pattern-analysis-content");
+  el.innerHTML = '<div class="empty-state">Yükleniyor...</div>';
+
+  // Mevcut grafikleri temizle
+  Object.values(patternCharts).forEach(c=>{ try{c.destroy();}catch(e){} });
+  patternCharts = {};
+
+  try{
+    const res  = await fetch(API+"/pattern_analysis/"+pid+"?days="+days);
+    const data = await res.json();
+    if(data.error){ el.innerHTML='<div class="empty-state" style="color:var(--red)">'+data.error+'</div>'; return; }
+    renderPatternAnalysis(data);
+  }catch(e){
+    el.innerHTML='<div class="empty-state" style="color:var(--red)">Yüklenemedi: '+e.message+'</div>';
+  }
+}
+
+function renderPatternAnalysis(data){
+  const el     = document.getElementById("pattern-analysis-content");
+  const person = data.person;
+  const daily  = data.daily  || [];
+  const norms  = data.norms  || {};
+  const preds  = data.predictions || [];
+  const flags  = data.all_deviation_flags || [];
+  const freq   = data.frequent_deviations || [];
+  const card   = "background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:14px;box-shadow:var(--shadow);";
+
+  let html = '<div style="font-size:14px;font-weight:800;color:#1d9e75;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #1d9e75">📐 '+person.name+' — Örüntü & Sapma Analizi</div>';
+
+  // ── En sık sapma gösteren metrikler ──
+  if(freq.length){
+    html += '<div style="'+card+'">'
+      +'<div style="font-size:12px;font-weight:700;margin-bottom:10px">🔁 En Sık Sapma Gösteren Metrikler</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    freq.forEach(f=>{
+      const color = f.pct>=50?"#e24b4a":f.pct>=30?"#ef9f27":"#378add";
+      html += '<div style="background:var(--surface2);border-radius:8px;padding:8px 12px;border-left:3px solid '+color+'">'
+        +'<div style="font-size:11px;font-weight:700">'+f.label+'</div>'
+        +'<div style="font-size:10px;color:var(--text2)">'+f.count+' günde sapma (%'+f.pct+')</div>'
+        +'</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // ── Son sapma bayrakları ──
+  const recentFlags = flags.slice(-20).reverse();
+  if(recentFlags.length){
+    html += '<div style="'+card+'">'
+      +'<div style="font-size:12px;font-weight:700;margin-bottom:10px">⚠️ Tespit Edilen Sapmalar</div>';
+    recentFlags.forEach(f=>{
+      const bc = f.severity==="kritik"?"#e24b4a":"#ef9f27";
+      const normStr = f.norm_mean!=null ? ' (norm: '+f.norm_mean+f.unit+')' : '';
+      html += '<div style="display:flex;gap:10px;align-items:center;padding:6px 8px;'
+        +'border-radius:6px;margin-bottom:4px;border-left:3px solid '+bc+';background:var(--surface2)">'
+        +'<span style="font-size:10px;color:var(--text3);white-space:nowrap">'+f.date+' '+f.weekday+'</span>'
+        +'<span style="font-size:11px;color:var(--text);flex:1"><strong>'+f.label+'</strong>: '
+        +f.value+f.unit+normStr+' — '+f.interpretation+'</span>'
+        +'<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:'+bc+'20;color:'+bc+'">'+f.severity+'</span>'
+        +'</div>';
+    });
+    html += '</div>';
+  }
+
+  // ── Grafik grubu: her metrik için norm bandı + günlük değer + sapma ──
+  const METRIC_GROUPS = [
+    {title:"🕐 Zaman Örüntüleri", metrics:[
+      {key:"wake_hour",      label:"Uyanış Saati"},
+      {key:"sleep_hour",     label:"Uyku Saati"},
+      {key:"first_meal_hour",label:"İlk Yemek Saati"},
+      {key:"exercise_hour",  label:"Egzersiz Saati"},
+    ]},
+    {title:"📊 Aktivite Metrikleri", metrics:[
+      {key:"steps",       label:"Adım Sayısı"},
+      {key:"active_mins", label:"Aktif Süre (dk)"},
+      {key:"sleep_mins",  label:"Uyku Süresi (dk)"},
+      {key:"exercise_mins",label:"Egzersiz Süresi (dk)"},
+    ]},
+    {title:"❤️ Biyometrik Metrikler", metrics:[
+      {key:"avg_hr",     label:"Ort. Nabız (bpm)"},
+      {key:"avg_stress", label:"Ort. Stres (/100)"},
+      {key:"avg_hrv",    label:"Ort. HRV"},
+      {key:"avg_spo2",   label:"Ort. SpO₂ (%)"},
+    ]},
+  ];
+
+  const labels = daily.map(d=>d.label+" "+d.weekday);
+  // Tahmin etiketleri
+  const predLabels = preds.map(p=>p.date+" "+p.weekday+" ⟶");
+
+  METRIC_GROUPS.forEach(group=>{
+    html += '<div style="'+card+'">'
+      +'<div style="font-size:12px;font-weight:700;margin-bottom:12px">'+group.title+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">';
+    group.metrics.forEach(m=>{
+      html += '<div><div style="font-size:10px;color:var(--text2);margin-bottom:4px">'+m.label+'</div>'
+        +'<div style="position:relative;height:140px"><canvas id="pc-'+m.key+'"></canvas></div></div>';
+    });
+    html += '</div></div>';
+  });
+
+  el.innerHTML = html;
+
+  // ── Grafikleri çiz ──
+  const allNorms = norms.all || {};
+
+  METRIC_GROUPS.forEach(group=>{
+    group.metrics.forEach(m=>{
+      const canvas = document.getElementById("pc-"+m.key);
+      if(!canvas) return;
+
+      const vals      = daily.map(d=>d[m.key]||null);
+      const predVals  = preds.map(p=>p[m.key]||null);
+      const norm      = allNorms[m.key];
+      const normMean  = norm?.mean;
+      const normHigh  = norm?.high;
+      const normLow   = norm?.low;
+
+      // Sapma rengini hesapla
+      const pointColors = daily.map(d=>{
+        const dev = d.deviations?.[m.key];
+        if(dev===null||dev===undefined) return "rgba(128,128,128,0.6)";
+        if(Math.abs(dev)>=2.5) return "#e24b4a";
+        if(Math.abs(dev)>=1.5) return "#ef9f27";
+        return "#1d9e75";
+      });
+
+      const allLabels = [...labels, ...predLabels];
+      const mainData  = [...vals, ...Array(preds.length).fill(null)];
+      const predData  = [...Array(daily.length).fill(null), ...predVals];
+
+      const datasets = [
+        // Gerçek değerler
+        {
+          label: m.label,
+          data:  mainData,
+          borderColor: "#534AB7",
+          backgroundColor: "rgba(83,74,183,0.1)",
+          pointBackgroundColor: [...pointColors, ...Array(preds.length).fill("transparent")],
+          pointRadius: [...Array(daily.length).fill(4), ...Array(preds.length).fill(0)],
+          pointBorderWidth: 2,
+          tension: 0.3,
+          spanGaps: true,
+        },
+        // Tahmin değerleri
+        {
+          label: "Tahmin",
+          data: predData,
+          borderColor: "#9FE1CB",
+          borderDash: [5,3],
+          pointBackgroundColor: "#9FE1CB",
+          pointRadius: [...Array(daily.length).fill(0), ...Array(preds.length).fill(5)],
+          tension: 0.3,
+          spanGaps: true,
+        },
+      ];
+
+      // Norm bandı eklentisi (annotation yerine dataset ile)
+      if(normHigh!=null && normLow!=null){
+        const bandHigh = [...Array(daily.length+preds.length).fill(normHigh)];
+        const bandLow  = [...Array(daily.length+preds.length).fill(normLow)];
+        datasets.push({
+          label:"Norm Üst",data:bandHigh,
+          borderColor:"rgba(95,200,150,0.3)",borderWidth:1,
+          pointRadius:0,fill:"+1",
+          backgroundColor:"rgba(95,200,150,0.08)",tension:0,
+        });
+        datasets.push({
+          label:"Norm Alt",data:bandLow,
+          borderColor:"rgba(95,200,150,0.3)",borderWidth:1,
+          pointRadius:0,fill:false,tension:0,
+        });
+      }
+
+      patternCharts[m.key] = new Chart(canvas.getContext("2d"),{
+        type:"line",
+        data:{ labels: allLabels, datasets },
+        options:{
+          responsive:true, maintainAspectRatio:false,
+          plugins:{
+            legend:{display:false},
+            tooltip:{
+              callbacks:{
+                label: ctx=>{
+                  if(ctx.dataset.label==="Norm Üst"||ctx.dataset.label==="Norm Alt") return null;
+                  const val = ctx.raw;
+                  if(val===null) return null;
+                  const idx = ctx.dataIndex;
+                  let str = ctx.dataset.label+": "+val;
+                  if(idx < daily.length){
+                    const dev = daily[idx].deviations?.[m.key];
+                    if(dev!=null) str += " (sapma: "+(dev>0?"+":"")+dev+" std)";
+                  }
+                  return str;
+                }
+              }
+            }
+          },
+          scales:{
+            x:{ ticks:{font:{size:9}, maxRotation:45}, grid:{color:"rgba(128,128,128,0.1)"} },
+            y:{ ticks:{font:{size:9}}, grid:{color:"rgba(128,128,128,0.1)"} }
+          }
+        }
+      });
+    });
+  });
+
+  // ── Tahmin tablosu ──
+  if(preds.length){
+    const tableEl = document.createElement("div");
+    tableEl.style.cssText = card;
+    tableEl.innerHTML = '<div style="font-size:12px;font-weight:700;margin-bottom:10px">🔮 Gelecek 3 Gün Tahmin Özeti</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">';
+
+    preds.forEach(pred=>{
+      const confColor = pred.confidence==="yüksek"?"#1d9e75":pred.confidence==="orta"?"#ef9f27":"#aaa";
+      let rows = "";
+      [
+        ["⏰ Uyanış",    pred.wake_hour_str],
+        ["😴 Uyku",     pred.sleep_hour_str],
+        ["🚶 Adım",     pred.steps ? pred.steps.toLocaleString("tr-TR") : "—"],
+        ["⏱ Aktif",    pred.active_mins ? pred.active_mins+" dk" : "—"],
+        ["❤️ Nabız",   pred.avg_hr ? Math.round(pred.avg_hr)+" bpm" : "—"],
+        ["🧠 Stres",    pred.avg_stress ? Math.round(pred.avg_stress)+"/100" : "—"],
+      ].forEach(([k,v])=>{
+        if(v) rows += '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0">'
+          +'<span style="color:var(--text2)">'+k+'</span><strong>'+v+'</strong></div>';
+      });
+      tableEl.innerHTML += '<div style="background:var(--surface2);border-radius:10px;padding:12px;border:1px solid var(--border)">'
+        +'<div style="font-size:13px;font-weight:800;color:#1d9e75">'+pred.date+'</div>'
+        +'<div style="font-size:10px;color:var(--text3);margin-bottom:8px">'+pred.weekday+(pred.is_weekend?" 🏖":"")+'</div>'
+        +rows
+        +'<div style="margin-top:6px;font-size:9px;color:'+confColor+'">Güven: '+pred.confidence+'</div>'
+        +'</div>';
+    });
+    tableEl.innerHTML += '</div>';
+    el.appendChild(tableEl);
+  }
+}
+
 // ── GÜNLÜK PROFİL & TAHMİN ───────────────────────────────────────────────────
 async function loadDailyProfile(){
   const sel = document.getElementById("analysis-person-select");
@@ -2067,6 +2639,362 @@ function renderDailyProfile(data){
 
   el.innerHTML = html || '<div class="empty-state">Yeterli veri yok</div>';
 }
+
+// ── VERİ KATKISI ─────────────────────────────────────────────────────────────
+let contribCharts = {};
+
+async function loadContributeTab(){
+  // Varsayılan tarihler
+  const today = new Date();
+  const week  = new Date(today); week.setDate(today.getDate()-7);
+  const fmt   = d => d.toISOString().split("T")[0];
+  const ds = document.getElementById("contrib-date-start");
+  const de = document.getElementById("contrib-date-end");
+  if(ds && !ds.value) ds.value = fmt(week);
+  if(de && !de.value) de.value = fmt(today);
+
+  await Promise.all([loadMonitoringProfiles(), loadCustomActivities(), loadContribStats()]);
+}
+
+// ── İZLEME PROFİLİ ───────────────────────────────────────────────────────────
+async function loadMonitoringProfiles(){
+  const res  = await fetch(API+"/monitoring_profiles");
+  const data = await res.json();
+  const list = document.getElementById("mp-list");
+  if(list){
+    list.innerHTML = data.length ? data.map(p=>
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;'
+      +'background:var(--surface2);border-radius:6px;margin-bottom:4px;font-size:11px">'
+      +'<span>'+p.icon+' <strong>'+p.name+'</strong> <span style="color:var(--text3)">('+p.profile_type+' / '+p.environment+')</span></span>'
+      +'<button onclick="deleteProfile('+p.id+')" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button>'
+      +'</div>'
+    ).join("") : '<div style="color:var(--text3);font-size:11px">Henüz profil eklenmedi</div>';
+  }
+  const sel = document.getElementById("contrib-profile-select");
+  if(sel){
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— Profil Seç —</option>';
+    data.forEach(p=>{ const o=document.createElement("option"); o.value=p.id; o.textContent=p.icon+" "+p.name+" ("+p.profile_type+")"; sel.appendChild(o); });
+    if(cur) sel.value = cur;
+  }
+}
+
+async function addMonitoringProfile(){
+  const name = document.getElementById("mp-name").value.trim();
+  if(!name){ showToast("Profil adı zorunlu","warn"); return; }
+  const icons = {insan:"👤",makine:"⚙️",alan:"📐",surec:"🔄",hasta:"🏥",diger:"📌"};
+  const type  = document.getElementById("mp-type").value;
+  await fetch(API+"/monitoring_profiles",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      name, profile_type: type,
+      environment: document.getElementById("mp-env").value,
+      description: document.getElementById("mp-desc").value.trim(),
+      location:    document.getElementById("mp-loc").value.trim(),
+      icon: icons[type]||"📍",
+    })});
+  document.getElementById("mp-name").value="";
+  document.getElementById("mp-desc").value="";
+  document.getElementById("mp-loc").value="";
+  showToast("Profil eklendi","ok");
+  loadMonitoringProfiles();
+}
+
+async function deleteProfile(id){
+  await fetch(API+"/monitoring_profiles/"+id,{method:"DELETE"});
+  loadMonitoringProfiles();
+}
+
+// ── ÖZEL AKTİVİTE ────────────────────────────────────────────────────────────
+async function loadCustomActivities(){
+  const res  = await fetch(API+"/custom_activities");
+  const data = await res.json();
+  const list = document.getElementById("act-list");
+  if(list){
+    const distLabels = {normal:"Normal",uniform:"Düzgün",exponential:"Üstel",
+      poisson:"Poisson",lognormal:"Log-Normal",triangular:"Üçgen",beta:"Beta"};
+    list.innerHTML = data.length ? data.map(a=>
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;'
+      +'background:var(--surface2);border-radius:6px;margin-bottom:4px;font-size:11px">'
+      +'<span>'+a.icon+' <strong>'+a.name+'</strong>'
+      +' <span style="color:var(--text3)">'
+      +a.frequency_per_day+'x/gün '+a.hour_start+':00-'+a.hour_end+':00'
+      +' | 📊 <em>'+(distLabels[a.distribution]||a.distribution||"Normal")+'</em>'
+      +'</span></span>'
+      +'<button onclick="deleteAct('+a.id+')" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button>'
+      +'</div>'
+    ).join("") : '<div style="color:var(--text3);font-size:11px">Henüz aktivite eklenmedi</div>';
+  }
+  const sel = document.getElementById("contrib-activity-select");
+  if(sel){
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— Aktivite Seç —</option>';
+    data.forEach(a=>{ const o=document.createElement("option"); o.value=a.id; o.textContent=a.icon+" "+a.name; sel.appendChild(o); });
+    if(cur) sel.value = cur;
+  }
+}
+
+// ── DAĞILIM PARAMETRELERİ ─────────────────────────────────────────────────────
+const DIST_PARAMS = {
+  normal:      [{key:"mean",  label:"Ortalama (μ)",      default:75},
+                {key:"std",   label:"Standart Sapma (σ)", default:10}],
+  uniform:     [{key:"low",   label:"Alt Sınır",          default:60},
+                {key:"high",  label:"Üst Sınır",          default:90}],
+  exponential: [{key:"scale", label:"Ölçek (1/λ)",        default:20},
+                {key:"offset",label:"Başlangıç Değeri",   default:40}],
+  poisson:     [{key:"lam",   label:"Lambda (λ)",         default:5}],
+  lognormal:   [{key:"mean",  label:"μ (log uzayı)",      default:4.3},
+                {key:"sigma", label:"σ (log uzayı)",      default:0.3}],
+  triangular:  [{key:"low",   label:"Alt Sınır",          default:50},
+                {key:"mode",  label:"Tepe Nokta (mod)",   default:75},
+                {key:"high",  label:"Üst Sınır",          default:100}],
+  beta:        [{key:"alpha", label:"Alpha (α)",          default:2},
+                {key:"beta",  label:"Beta (β)",           default:5},
+                {key:"scale", label:"Ölçek",              default:100}],
+};
+
+function updateDistParams(){
+  const dist = document.getElementById("act-distribution").value;
+  const area = document.getElementById("dist-params-area");
+  if(!area) return;
+  const params = DIST_PARAMS[dist] || [];
+  area.innerHTML = params.map(p=>
+    '<div>'
+    +'<div style="font-size:10px;color:var(--text2);margin-bottom:2px">'+p.label+'</div>'
+    +'<input type="number" class="live-select" id="dp-'+p.key+'" value="'+p.default
+    +'" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);'
+    +'background:var(--surface2);color:var(--text);font-size:12px"/>'
+    +'</div>'
+  ).join("");
+}
+
+// İlk yüklemede varsayılan parametreleri göster
+document.addEventListener("DOMContentLoaded", ()=>{ updateDistParams(); });
+
+async function addCustomActivity(){
+  const name = document.getElementById("act-name").value.trim();
+  if(!name){ showToast("Aktivite adı zorunlu","warn"); return; }
+  const hrVal     = document.getElementById("act-hr").value;
+  const stressVal = document.getElementById("act-stress").value;
+  const spo2Val   = document.getElementById("act-spo2").value;
+
+  // Dağılım parametrelerini topla
+  const dist  = document.getElementById("act-distribution")?.value || "normal";
+  const dParams = DIST_PARAMS[dist] || [];
+  const distParams = {};
+  dParams.forEach(p=>{
+    const el = document.getElementById("dp-"+p.key);
+    if(el) distParams[p.key] = parseFloat(el.value) || p.default;
+  });
+
+  // hr_base dağılım parametrelerinden türet
+  const hrBase = distParams.mean || distParams.low
+    ? Math.round((distParams.mean || ((distParams.low||0)+(distParams.high||100))/2))
+    : (hrVal ? parseInt(hrVal) : 75);
+
+  await fetch(API+"/custom_activities",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      name,
+      description:       document.getElementById("act-desc").value.trim(),
+      hour_start:        parseInt(document.getElementById("act-hour-start").value),
+      hour_end:          parseInt(document.getElementById("act-hour-end").value),
+      duration_min:      parseInt(document.getElementById("act-dur-min").value),
+      duration_max:      parseInt(document.getElementById("act-dur-max").value),
+      frequency_per_day: parseInt(document.getElementById("act-freq").value),
+      hr_base:           hrBase,
+      hr_noise:          distParams.std || 8,
+      stress_base:       stressVal ? parseInt(stressVal) : 30,
+      spo2_base:         spo2Val   ? parseFloat(spo2Val) : 98.0,
+      icon:              document.getElementById("act-icon").value.trim()||"🔵",
+      distribution:      dist,
+      dist_params:       distParams,
+    })});
+  document.getElementById("act-name").value="";
+  document.getElementById("act-desc").value="";
+  document.getElementById("act-hr").value="";
+  document.getElementById("act-stress").value="";
+  document.getElementById("act-spo2").value="";
+  showToast("Aktivite eklendi ("+dist+" dağılımı)","ok");
+  loadCustomActivities();
+}
+
+async function deleteAct(id){
+  await fetch(API+"/custom_activities/"+id,{method:"DELETE"});
+  loadCustomActivities();
+}
+
+// ── VERİ ÜRETİMİ ─────────────────────────────────────────────────────────────
+async function simulateContribution(){
+  const mpid  = document.getElementById("contrib-profile-select").value;
+  const aid   = document.getElementById("contrib-activity-select").value;
+  const ds    = document.getElementById("contrib-date-start").value;
+  const de    = document.getElementById("contrib-date-end").value;
+  if(!mpid||!aid){ showToast("Profil ve aktivite seçin","warn"); return; }
+  if(!ds||!de)   { showToast("Tarih aralığı seçin","warn");      return; }
+
+  const res_el = document.getElementById("contrib-result");
+  res_el.innerHTML = '<div style="color:var(--text3);font-size:12px">⏳ Veri üretiliyor...</div>';
+
+  const r = await fetch(API+"/contribute/simulate",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({profile_id:parseInt(mpid),activity_id:parseInt(aid),
+      date_start:ds, date_end:de})});
+  const data = await r.json();
+  if(data.error){ res_el.innerHTML='<div style="color:var(--red)">'+data.error+'</div>'; return; }
+
+  let html = '<div style="color:#1d9e75;font-size:12px;font-weight:700;margin-bottom:8px">'
+    +'✅ '+data.records_added+' kayıt üretildi ('+ds+' → '+de+')</div>';
+  if(data.preview && data.preview.length){
+    html += '<div style="font-size:11px;color:var(--text2);margin-bottom:5px">Önizleme:</div>'
+      +'<table style="font-size:11px;width:100%;border-collapse:collapse">'
+      +'<tr style="color:var(--text3)"><td>Tarih</td><td>Başlangıç</td><td>Süre</td><td>Nabız</td><td>SpO₂</td><td>Stres</td></tr>';
+    data.preview.forEach(r2=>{
+      html+='<tr><td>'+r2.date+'</td><td>'+r2.start+'</td><td>'+r2.duration_mins+' dk</td>'
+        +'<td>'+r2.heart_rate+' bpm</td><td>'+r2.spo2+'%</td><td>'+r2.stress_level+'</td></tr>';
+    });
+    html += '</table>';
+  }
+  res_el.innerHTML = html;
+  loadContribStats();
+  showToast("Veri üretildi — Sapma Analizi butonuna tıkla","ok");
+}
+
+// ── SAPMA ANALİZİ ─────────────────────────────────────────────────────────────
+async function analyzeContribution(){
+  const mpid = document.getElementById("contrib-profile-select").value;
+  if(!mpid){ showToast("Önce profil seçin","warn"); return; }
+  const el = document.getElementById("contrib-analysis");
+  el.innerHTML = '<div style="color:var(--text3);font-size:12px">⏳ Analiz yapılıyor...</div>';
+
+  Object.values(contribCharts).forEach(c=>{try{c.destroy();}catch(e){}});
+  contribCharts = {};
+
+  const res  = await fetch(API+"/contribute/pattern/"+mpid);
+  const data = await res.json();
+  if(data.error){ el.innerHTML='<div style="color:var(--red)">'+data.error+'</div>'; return; }
+
+  const card = "background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:14px;";
+  let html = '<div style="font-size:14px;font-weight:800;color:#534AB7;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #534AB7">'
+    +'📐 '+data.profile.name+' — Sapma Analizi ('+data.total_records+' kayıt)</div>';
+
+  // Uyarılar
+  if(data.alerts.length){
+    html += '<div style="'+card+'">'
+      +'<div style="font-size:12px;font-weight:700;margin-bottom:10px">⚠️ Tespit Edilen Sapmalar</div>';
+    const metricLabels = {heart_rate:"Nabız",spo2:"SpO₂",stress:"Stres",duration:"Süre"};
+    data.alerts.forEach(a=>{
+      const bc = a.severity==="kritik"?"#e24b4a":"#ef9f27";
+      html += '<div style="display:flex;gap:10px;align-items:center;padding:6px 8px;'
+        +'border-radius:6px;margin-bottom:4px;border-left:3px solid '+bc+';background:var(--surface2)">'
+        +'<span style="font-size:10px;color:var(--text3);white-space:nowrap">'+a.date+'</span>'
+        +'<span style="font-size:11px;flex:1"><strong>'+a.activity+'</strong> — '
+        +(metricLabels[a.metric]||a.metric)+': <strong>'+a.value+'</strong>'
+        +' (norm: '+a.norm_mean+') — '+(a.deviation>0?"+":"")+a.deviation+' std</span>'
+        +'<span style="font-size:9px;padding:2px 6px;border-radius:4px;background:'+bc+'20;color:'+bc+'">'+a.severity+'</span>'
+        +'</div>';
+    });
+    html += '</div>';
+
+    // Bildirim merkezine ekle
+    data.alerts.slice(0,3).forEach(a=>{
+      addNotif(data.profile.name+" — "+a.activity+": "+(a.metric)+" sapması ("+a.severity+")","warn",data.profile.name);
+    });
+  }
+
+  // Her aktivite için grafik
+  data.activity_stats.forEach(act=>{
+    const labels = act.daily_series.map(d=>d.date);
+    html += '<div style="'+card+'">'
+      +'<div style="font-size:12px;font-weight:700;margin-bottom:8px">'+act.activity_name
+      +' <span style="color:var(--text2);font-weight:400">('+act.record_count+' kayıt)</span></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+
+    const metrics = [
+      {key:"avg_hr",     label:"Nabız (bpm)",    norm:act.hr_stat,       color:"#e24b4a"},
+      {key:"avg_spo2",   label:"SpO₂ (%)",       norm:act.spo2_stat,     color:"#378add"},
+      {key:"avg_stress", label:"Stres (/100)",    norm:act.stress_stat,   color:"#ef9f27"},
+      {key:"avg_duration",label:"Süre (dk)",      norm:act.duration_stat, color:"#534AB7"},
+    ];
+
+    metrics.forEach(m=>{
+      const cid = "cc-"+act.activity_name.replace(/\s+/g,"_")+"-"+m.key;
+      html += '<div><div style="font-size:10px;color:var(--text2);margin-bottom:3px">'+m.label+'</div>'
+        +'<div style="position:relative;height:120px"><canvas id="'+cid+'"></canvas></div></div>';
+    });
+    html += '</div></div>';
+
+    // Grafikleri sonra çiz
+    setTimeout(()=>{
+      metrics.forEach(m=>{
+        const cid = "cc-"+act.activity_name.replace(/\s+/g,"_")+"-"+m.key;
+        const canvas = document.getElementById(cid);
+        if(!canvas) return;
+        const vals   = act.daily_series.map(d=>d[m.key]||null);
+        const norm   = m.norm;
+        const ptClrs = act.daily_series.map(d=>{
+          const dev = d.deviations[m.key.replace("avg_","").replace("_hr","heart_rate").replace("_spo2","spo2").replace("_stress","stress").replace("_duration","duration")]||0;
+          if(Math.abs(dev)>=2.5) return "#e24b4a";
+          if(Math.abs(dev)>=1.5) return "#ef9f27";
+          return "#1d9e75";
+        });
+        const datasets = [{
+          label:m.label, data:vals,
+          borderColor:m.color, backgroundColor:m.color+"22",
+          pointBackgroundColor:ptClrs, pointRadius:4, tension:0.3, spanGaps:true,
+        }];
+        if(norm && norm.high!=null){
+          datasets.push({label:"Norm Üst",data:Array(labels.length).fill(norm.high),borderColor:"rgba(95,200,150,0.3)",borderWidth:1,pointRadius:0,fill:"+1",backgroundColor:"rgba(95,200,150,0.08)",tension:0});
+          datasets.push({label:"Norm Alt",data:Array(labels.length).fill(norm.low),borderColor:"rgba(95,200,150,0.3)",borderWidth:1,pointRadius:0,fill:false,tension:0});
+        }
+        contribCharts[cid] = new Chart(canvas.getContext("2d"),{
+          type:"line", data:{labels,datasets},
+          options:{responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:false}},
+            scales:{x:{ticks:{font:{size:8},maxRotation:45},grid:{color:"rgba(128,128,128,0.1)"}},
+                    y:{ticks:{font:{size:9}},grid:{color:"rgba(128,128,128,0.1)"}}}}
+        });
+      });
+    }, 100);
+  });
+
+  el.innerHTML = html;
+}
+
+function exportContribution(){
+  const mpid = document.getElementById("contrib-profile-select").value;
+  let url = API+"/contribute/export?"+(mpid?"profile_id="+mpid:"");
+  showToast("CSV indiriliyor...","ok");
+  window.open(url,"_blank");
+}
+
+async function loadContribStats(){
+  const res  = await fetch(API+"/contribute/stats");
+  const data = await res.json();
+  const el   = document.getElementById("contrib-stats");
+  if(!el) return;
+  if(data.total_records===0){
+    el.innerHTML='<div style="color:var(--text3);font-size:12px">Henüz veri üretilmedi.</div>';
+    return;
+  }
+  const c2 = "background:var(--surface2);border-radius:8px;padding:10px 12px;";
+  let html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">'
+    +'<div style="'+c2+'text-align:center"><div style="font-size:22px;font-weight:800;color:var(--accent)">'+data.total_records+'</div><div style="font-size:10px;color:var(--text2)">Toplam Kayıt</div></div>'
+    +'<div style="'+c2+'text-align:center"><div style="font-size:22px;font-weight:800;color:#1d9e75">'+data.by_activity.length+'</div><div style="font-size:10px;color:var(--text2)">Aktivite Tipi</div></div>'
+    +'<div style="'+c2+'text-align:center"><div style="font-size:22px;font-weight:800;color:#ef9f27">'+data.by_environment.length+'</div><div style="font-size:10px;color:var(--text2)">Ortam</div></div></div>';
+  if(data.by_activity.length){
+    const total = data.by_activity.reduce((s,a)=>s+a.cnt,0);
+    html += '<div style="font-size:11px;font-weight:700;margin-bottom:6px">Aktivite Dağılımı:</div>';
+    data.by_activity.forEach(a=>{
+      const pct=Math.round(a.cnt/total*100);
+      html+='<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">'
+        +'<span>'+a.activity_name+'</span>'
+        +'<span style="color:var(--text2)">'+a.cnt+' ('+pct+'%) | ort. nabız: '+a.avg_hr+' bpm</span></div>'
+        +'<div style="height:5px;background:var(--surface2);border-radius:3px">'
+        +'<div style="height:100%;width:'+pct+'%;background:var(--accent);border-radius:3px"></div></div></div>';
+    });
+  }
+  el.innerHTML = html;
+}
+
 
 // ── ANOMALİ GÜNCELLEME (WebSocket trigger) ───────────────────────────────────
 async function fetchAnomalies(){
