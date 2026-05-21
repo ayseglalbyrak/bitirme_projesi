@@ -479,10 +479,15 @@ tr:last-child td{border-bottom:none;}
           <button class="btn btn-primary btn-sm" onclick="downloadAnalysisPDF()">📄 PDF Rapor</button>
           <button class="btn btn-sm" onclick="loadDailyProfile()"
             style="background:var(--accent);color:#fff">🔬 Günlük Profil & Tahmin</button>
-          <button class="btn btn-sm" onclick="toggleDistPanel()"
-            style="background:#378add;color:#fff">📊 Dağılım Ayarları</button>
+
           <button class="btn btn-sm" onclick="loadPatternAnalysis()"
             style="background:#1d9e75;color:#fff">📐 Örüntü & Sapma Analizi</button>
+          <button class="btn btn-sm" onclick="togglePatternDistModal()"
+            style="background:#2a7a5a;color:#fff" title="Dağılım Ayarları">⚙️ Dağılım</button>
+          <button class="btn btn-sm" onclick="loadMarkovAnalysis()"
+            style="background:#7c3aed;color:#fff">🔗 Markov Geçişleri</button>
+          <button class="btn btn-sm" onclick="loadQualityAnalysis()"
+            style="background:#d97706;color:#fff">📊 Veri Kalitesi</button>
           <div style="display:flex;gap:4px;">
             <button class="btn btn-sm" onclick="exportData('activity')"
               style="background:var(--green);color:#fff;font-size:10px">📊 Aktivite CSV</button>
@@ -494,27 +499,33 @@ tr:last-child td{border-bottom:none;}
           <span id="analysis-loading" style="font-size:11px;color:var(--text3);display:none">Yükleniyor...</span>
         </div>
       </div>
-      <!-- Dağılım Ayarları Paneli -->
-      <div id="dist-panel" style="display:none;background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:1rem;margin-bottom:14px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:12px">📊 Metrik Bazlı Dağılım Ayarları</div>
-        <div style="font-size:11px;color:var(--text2);margin-bottom:12px">
-          Her metrik için veri üretiminde kullanılacak istatistiksel dağılımı ve parametrelerini ayarlayın.
-          Simülasyon bu ayarları kullanarak gerçekçi veri üretir.
-        </div>
-        <div id="dist-settings-area"></div>
-        <div style="display:flex;gap:8px;margin-top:12px">
-          <button class="btn btn-primary" onclick="saveDistSettings()">💾 Kaydet</button>
-          <button class="btn btn-sm" onclick="previewDistribution()" style="background:var(--surface2);color:var(--text)">👁 Önizle</button>
-          <button class="btn btn-sm" onclick="resetDistSettings()" style="background:var(--surface2);color:var(--text)">↺ Varsayılana Dön</button>
-        </div>
-        <div id="dist-preview-area" style="margin-top:10px"></div>
-      </div>
-
       <div id="analysis-content"><div class="empty-state">Kişi seçin</div></div>
       <!-- Günlük profil paneli -->
       <div id="daily-profile-content" style="margin-top:14px"></div>
+      <!-- Örüntü Dağılım Ayarları Modalı -->
+      <div id="pattern-dist-modal" style="display:none;background:var(--surface);border-radius:12px;
+        border:2px solid #1d9e75;padding:1rem;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:13px;font-weight:700;color:#1d9e75">⚙️ Örüntü Analizi — Dağılım Ayarları</div>
+          <button onclick="togglePatternDistModal()" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:16px">✕</button>
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:12px">
+          Her metrik için norm hesabında kullanılacak dağılımı seçin.
+          Örn: Adım sayısı için Log-Normal, uyanış saati için Normal.
+          Kaydettikten sonra analizi yeniden çalıştırın.
+        </div>
+        <div id="pattern-dist-settings-area" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="savePatternDistSettings()">💾 Kaydet</button>
+          <button class="btn btn-sm" onclick="resetPatternDistSettings()" style="background:var(--surface2);color:var(--text)">↺ Varsayılan</button>
+        </div>
+        <div id="pattern-dist-save-msg" style="margin-top:8px;font-size:11px;color:#1d9e75"></div>
+      </div>
+
       <!-- Örüntü analizi paneli -->
       <div id="pattern-analysis-content" style="margin-top:14px"></div>
+      <div id="markov-analysis-content" style="margin-top:14px"></div>
+      <div id="quality-analysis-content" style="margin-top:14px"></div>
     </div>
   </div>
 
@@ -2106,181 +2117,505 @@ async function downloadAnalysisPDF(){
   showToast("PDF rapor indirildi","ok");
 }
 
-// ── DAĞILIM AYARLARI ─────────────────────────────────────────────────────────
+// ── VERİ KALİTE ANALİZİ ──────────────────────────────────────────────────────
 
-const DIST_DEFS = {
-  normal:      {label:"Normal (Gaussian)",  params:[{key:"mean",label:"Ortalama (μ)",default:75},{key:"std",label:"Std Sapma (σ)",default:10}]},
-  uniform:     {label:"Düzgün (Uniform)",   params:[{key:"low",label:"Alt Sınır",default:60},{key:"high",label:"Üst Sınır",default:90}]},
-  exponential: {label:"Üstel (Exponential)",params:[{key:"scale",label:"Ölçek (1/λ)",default:20},{key:"offset",label:"Başlangıç",default:0}]},
-  poisson:     {label:"Poisson",            params:[{key:"lam",label:"Lambda (λ)",default:5}]},
-  lognormal:   {label:"Log-Normal",         params:[{key:"mean",label:"μ (log)",default:4.3},{key:"sigma",label:"σ (log)",default:0.5}]},
-  triangular:  {label:"Üçgen (Triangular)", params:[{key:"low",label:"Alt",default:50},{key:"mode",label:"Tepe",default:75},{key:"high",label:"Üst",default:100}]},
-  beta:        {label:"Beta",               params:[{key:"alpha",label:"α",default:2},{key:"beta",label:"β",default:5},{key:"scale",label:"Ölçek",default:100}]},
-};
-
-const METRIC_LABELS = {
-  heart_rate:  {label:"Nabız (bpm)",      icon:"❤️", min:40,  max:200},
-  spo2:        {label:"SpO₂ (%)",         icon:"🫁", min:88,  max:100},
-  skin_temp:   {label:"Cilt Sıcaklığı",   icon:"🌡", min:34,  max:40},
-  hrv:         {label:"HRV",             icon:"💓", min:5,   max:100},
-  stress:      {label:"Stres (/100)",     icon:"🧠", min:5,   max:99},
-  steps:       {label:"Adım Sayısı",      icon:"🚶", min:0,   max:30000},
-  sleep_mins:  {label:"Uyku Süresi (dk)", icon:"😴", min:0,   max:720},
-  active_mins: {label:"Aktif Süre (dk)",  icon:"⏱", min:0,   max:480},
-};
-
-let currentDistSettings = {};
-
-async function loadDistSettings(){
-  const res  = await fetch(API+"/distributions");
-  const data = await res.json();
-  currentDistSettings = {};
-  data.forEach(d=>{
-    try{ currentDistSettings[d.metric] = {distribution:d.distribution, params:JSON.parse(d.params)}; }
-    catch(e){ currentDistSettings[d.metric] = {distribution:"normal",params:{}}; }
-  });
-  renderDistSettings();
-}
-
-function renderDistSettings(){
-  const area = document.getElementById("dist-settings-area");
-  if(!area) return;
-  let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-  Object.entries(METRIC_LABELS).forEach(([metric, meta])=>{
-    const cur  = currentDistSettings[metric] || {distribution:"normal",params:{}};
-    const opts = Object.entries(DIST_DEFS).map(([k,v])=>
-      `<option value="${k}" ${cur.distribution===k?"selected":""}>${v.label}</option>`).join("");
-    const paramDef = DIST_DEFS[cur.distribution]?.params || [];
-    const paramHtml = paramDef.map(p=>{
-      const val = cur.params[p.key] !== undefined ? cur.params[p.key] : p.default;
-      return `<div style="display:flex;align-items:center;gap:4px;font-size:10px">
-        <span style="color:var(--text2);white-space:nowrap;min-width:70px">${p.label}</span>
-        <input type="number" step="any" value="${val}"
-          id="dp-${metric}-${p.key}"
-          style="width:70px;padding:3px 5px;border-radius:4px;border:1px solid var(--border);
-          background:var(--surface2);color:var(--text);font-size:11px"/>
-      </div>`;
-    }).join("");
-    html += `<div style="background:var(--surface2);border-radius:8px;padding:10px">
-      <div style="font-size:11px;font-weight:700;margin-bottom:6px">${meta.icon} ${meta.label}</div>
-      <select id="ds-${metric}" onchange="onDistChange('${metric}')"
-        style="width:100%;font-size:11px;padding:4px;border-radius:4px;border:1px solid var(--border);
-        background:var(--surface2);color:var(--text);margin-bottom:6px">${opts}</select>
-      <div id="dparams-${metric}">${paramHtml}</div>
-    </div>`;
-  });
-  html += '</div>';
-  area.innerHTML = html;
-}
-
-function onDistChange(metric){
-  const sel  = document.getElementById("ds-"+metric);
-  const dist = sel.value;
-  const paramDef = DIST_DEFS[dist]?.params || [];
-  const cur  = currentDistSettings[metric] || {params:{}};
-  const paramHtml = paramDef.map(p=>{
-    const val = cur.params[p.key] !== undefined ? cur.params[p.key] : p.default;
-    return `<div style="display:flex;align-items:center;gap:4px;font-size:10px">
-      <span style="color:var(--text2);white-space:nowrap;min-width:70px">${p.label}</span>
-      <input type="number" step="any" value="${val}"
-        id="dp-${metric}-${p.key}"
-        style="width:70px;padding:3px 5px;border-radius:4px;border:1px solid var(--border);
-        background:var(--surface2);color:var(--text);font-size:11px"/>
-    </div>`;
-  }).join("");
-  document.getElementById("dparams-"+metric).innerHTML = paramHtml;
-}
-
-async function saveDistSettings(){
-  const items = [];
-  Object.keys(METRIC_LABELS).forEach(metric=>{
-    const selEl = document.getElementById("ds-"+metric);
-    if(!selEl) return;
-    const dist     = selEl.value;
-    const paramDef = DIST_DEFS[dist]?.params || [];
-    const params   = {};
-    paramDef.forEach(p=>{
-      const el = document.getElementById("dp-"+metric+"-"+p.key);
-      if(el) params[p.key] = parseFloat(el.value) || p.default;
-    });
-    items.push({metric, distribution:dist, params});
-    currentDistSettings[metric] = {distribution:dist, params};
-  });
-  await fetch(API+"/distributions",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(items)});
-  showToast("Dağılım ayarları kaydedildi — simülasyon güncellendi","ok");
-}
-
-async function previewDistribution(){
-  // İlk metriğin önizlemesini göster
-  const metric   = Object.keys(METRIC_LABELS)[0];
-  const selEl    = document.getElementById("ds-"+metric);
-  if(!selEl) return;
-  const dist     = selEl.value;
-  const paramDef = DIST_DEFS[dist]?.params||[];
-  const params   = {};
-  paramDef.forEach(p=>{ const el=document.getElementById("dp-"+metric+"-"+p.key); if(el) params[p.key]=parseFloat(el.value)||p.default; });
-  const meta = METRIC_LABELS[metric];
-
-  const res  = await fetch(API+"/distributions/preview",{method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({distribution:dist,params,min_v:meta.min,max_v:meta.max})});
-  const data = await res.json();
-
-  const area = document.getElementById("dist-preview-area");
-  if(!area) return;
-  area.innerHTML = `<div style="font-size:11px;color:var(--text2);margin-bottom:6px">
-    Önizleme: ${meta.icon} ${meta.label} — ${DIST_DEFS[dist]?.label} (100 örnek)
-    &nbsp; Ort: <strong>${data.mean}</strong> &nbsp; Std: <strong>${data.std}</strong>
-    &nbsp; Min: <strong>${data.min}</strong> &nbsp; Max: <strong>${data.max}</strong>
-  </div>
-  <div style="display:flex;gap:1px;align-items:flex-end;height:60px;background:var(--surface2);border-radius:6px;padding:4px">
-    ${buildMiniHistogram(data.samples, meta.min, meta.max)}
-  </div>`;
-}
-
-function buildMiniHistogram(samples, minV, maxV){
-  const bins = 20;
-  const counts = Array(bins).fill(0);
-  const range  = (maxV - minV) || 1;
-  samples.forEach(v=>{
-    const idx = Math.min(bins-1, Math.floor((v-minV)/range*bins));
-    if(idx >= 0) counts[idx]++;
-  });
-  const maxC = Math.max(...counts) || 1;
-  return counts.map(c=>{
-    const h = Math.round(c/maxC*52);
-    return `<div style="flex:1;height:${h}px;background:var(--accent);border-radius:1px;opacity:0.7"></div>`;
-  }).join("");
-}
-
-function toggleDistPanel(){
-  const panel = document.getElementById("dist-panel");
-  if(!panel) return;
-  if(panel.style.display==="none"){
-    panel.style.display="block";
-    loadDistSettings();
-  } else {
-    panel.style.display="none";
+async function loadQualityAnalysis(){
+  const sel = document.getElementById("analysis-person-select");
+  if(!sel || !sel.value){ showToast("Önce bir kişi seçin","warn"); return; }
+  const pid = sel.value;
+  const el  = document.getElementById("quality-analysis-content");
+  if(!el) return;
+  el.innerHTML = '<div style="color:var(--text2);padding:20px;text-align:center">🔄 Kalite analizi hesaplanıyor...</div>';
+  try{
+    const res  = await fetch(API+"/quality/"+pid);
+    if(!res.ok){ const e=await res.json(); el.innerHTML='<div style="color:#ef4444;padding:12px">'+e.error+'</div>'; return; }
+    const data = await res.json();
+    renderQualityAnalysis(data, el);
+  } catch(e){
+    el.innerHTML = '<div style="color:#ef4444;padding:12px">Hata: '+e+'</div>';
   }
 }
 
-async function resetDistSettings(){
-  if(!confirm("Tüm dağılım ayarları varsayılana döndürülecek. Emin misin?")) return;
+function renderQualityAnalysis(data, el){
+  const person  = data.person;
+  const metrics = data.metrics || [];
+  const scores  = data.scores  || {};
+  const actDist = data.activity_distribution || {};
+  const reg     = data.regularity || {};
+  const markov  = data.markov    || {};
+
+  function scoreColor(s){
+    if(s>=80) return "#22c55e";
+    if(s>=60) return "#f59e0b";
+    return "#ef4444";
+  }
+  function scoreLabel(s){
+    if(s>=80) return "İyi";
+    if(s>=60) return "Orta";
+    return "Zayıf";
+  }
+  function gauge(score, size){
+    size = size || 60;
+    const color = scoreColor(score);
+    const r = size/2 - 5;
+    const circ = 2*Math.PI*r;
+    const dash = circ * score/100;
+    const fs = size >= 51 ? 12 : 9;
+    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'
+      +'<circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="var(--surface2)" stroke-width="5"/>'
+      +'<circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="5"'
+      +' stroke-dasharray="'+dash+' '+(circ-dash)+'" stroke-linecap="round"'
+      +' transform="rotate(-90 '+(size/2)+' '+(size/2)+')"/>'
+      +'<text x="'+(size/2)+'" y="'+(size/2+4)+'" text-anchor="middle" fill="'+color+'"'
+      +' font-size="'+fs+'" font-weight="bold">'+score+'</text>'
+      +'</svg>';
+  }
+
+  const scoreCards = [
+    {label:"Genel Kalite",     key:"overall",          icon:"🏆"},
+    {label:"Sensör Gerçeklik", key:"sensor_realism",   icon:"❤️"},
+    {label:"Aktivite Dağılımı",key:"activity_realism", icon:"🏃"},
+    {label:"Günlük Düzenlilik",key:"regularity",       icon:"📅"},
+  ].map(function(s){
+    const score = scores[s.key] != null ? scores[s.key] : 0;
+    return '<div style="text-align:center;background:var(--surface);border-radius:10px;'
+      +'padding:12px;border:1px solid '+scoreColor(score)+'44">'
+      +'<div style="font-size:18px;margin-bottom:4px">'+s.icon+'</div>'
+      +gauge(score, 64)
+      +'<div style="font-size:10px;color:var(--text2);margin-top:4px">'+s.label+'</div>'
+      +'<div style="font-size:10px;font-weight:700;color:'+scoreColor(score)+'">'+scoreLabel(score)+'</div>'
+      +'</div>';
+  }).join("");
+
+  const metricCards = metrics.map(function(m){
+    const klLabel = m.kl_divergence < 0.1 ? "✅ Normal dağılıma uygun"
+                  : m.kl_divergence < 0.3 ? "⚠️ Hafif sapma" : "❌ Belirgin sapma";
+    const skewLabel = Math.abs(m.skewness) < 0.5 ? "Simetrik"
+                    : m.skewness > 0 ? "Sağa çarpık" : "Sola çarpık";
+    const bars = [
+      {label:"Ortalama",  val:m.mean_score},
+      {label:"Std Sapma", val:m.std_score},
+      {label:"Aralık",    val:m.range_score},
+      {label:"Normallik", val:m.normal_score},
+    ];
+    let barsHtml = bars.map(function(b){
+      return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'
+        +'<div style="width:70px;font-size:9px;color:var(--text2)">'+b.label+'</div>'
+        +'<div style="flex:1;height:5px;border-radius:3px;background:var(--surface2);overflow:hidden">'
+        +'<div style="width:'+b.val+'%;height:100%;background:'+scoreColor(b.val)+';border-radius:3px"></div>'
+        +'</div>'
+        +'<div style="font-size:9px;color:'+scoreColor(b.val)+';width:24px">'+b.val+'</div>'
+        +'</div>';
+    }).join("");
+
+    return '<div style="background:var(--surface);border-radius:10px;padding:12px;border:1px solid var(--border)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">'
+      +'<div><div style="font-size:12px;font-weight:700">'+m.name+' <span style="color:var(--text2);font-weight:400">('+m.unit+')</span></div>'
+      +'<div style="font-size:10px;color:var(--text2);margin-top:2px">'+m.n+' ölçüm · '+data.period_days+' gün</div></div>'
+      +gauge(m.realism_score, 52)+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;font-size:10px">'
+      +'<div>Ortalama: <b>'+m.mean+' '+m.unit+'</b> <span style="color:var(--text2)">(beklenen: '+m.expected_mean+')</span></div>'
+      +'<div>Std: <b>'+m.std+'</b> <span style="color:var(--text2)">(beklenen: '+m.expected_std+')</span></div>'
+      +'<div>Min: <b>'+m.min+'</b> · Max: <b>'+m.max+'</b></div>'
+      +'<div>Çarpıklık: <b>'+m.skewness+'</b> <span style="color:var(--text2)">'+skewLabel+'</span></div>'
+      +'<div>KL-Div: <b>'+m.kl_divergence+'</b></div>'
+      +'<div>Chi²: <b>'+m.chi2+'</b> (p='+m.chi2_p+')</div>'
+      +'</div>'
+      +'<div style="font-size:9px;color:var(--text2);margin-bottom:6px">'+klLabel+'</div>'
+      +barsHtml+'</div>';
+  }).join("");
+
+  const actTypes = {sleep:"Uyku",active:"Aktif",rest:"Dinlenme",meal:"Yemek"};
+  const actRows = Object.entries(actDist.expected||{}).map(function(entry){
+    const t = entry[0]; const exp = entry[1];
+    const obs = (actDist.observed||{})[t] || 0;
+    const diff = Math.abs(obs-exp);
+    const ok   = diff < 0.08;
+    const barW = Math.min(60, Math.round(obs*100*3));
+    return '<tr>'
+      +'<td style="padding:5px 8px;font-size:11px">'+(actTypes[t]||t)+'</td>'
+      +'<td style="padding:5px 8px;text-align:center">'
+      +'<div style="display:flex;align-items:center;gap:4px">'
+      +'<div style="width:60px;height:6px;border-radius:3px;background:var(--surface2)">'
+      +'<div style="width:'+barW+'px;height:100%;background:#7c3aed;border-radius:3px"></div>'
+      +'</div><span style="font-size:10px">%'+Math.round(obs*100)+'</span></div></td>'
+      +'<td style="padding:5px 8px;text-align:center;font-size:10px;color:var(--text2)">%'+Math.round(exp*100)+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;font-size:10px;color:'+(ok?'#22c55e':'#f59e0b')+'">'+(ok?'✅ Uygun':'⚠️ Sapma')+'</td>'
+      +'</tr>';
+  }).join("");
+
+  const wakeStd = reg.wake_std_hours;
+  let regLabel = '—';
+  if(wakeStd != null){
+    if(wakeStd <= 0.5)      regLabel = '✅ Çok düzenli';
+    else if(wakeStd <= 1.5) regLabel = '⚠️ Orta düzey';
+    else                    regLabel = '❌ Düzensiz';
+  }
+
+  el.innerHTML =
+    '<div style="font-size:14px;font-weight:800;color:#d97706;margin-bottom:12px;'
+    +'padding-bottom:8px;border-bottom:2px solid #d97706">'
+    +'📊 '+person.name+' — Üretilen Veri Kalite Analizi</div>'
+    +'<div style="font-size:11px;color:var(--text2);margin-bottom:14px">'
+    +data.total_sensor_records+' sensör kaydı analiz edildi · '
+    +data.period_days+' günlük veri · '
+    +'Markov: '+(markov.active ? markov.transitions_learned+' geçiş öğrenildi ✅' : 'Henüz öğrenilmedi')
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'+scoreCards+'</div>'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:8px">🔬 Metrik Bazlı Kalite Analizi</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">'+metricCards+'</div>'
+    +'<div style="background:var(--surface);border-radius:10px;padding:12px;border:1px solid var(--border);margin-bottom:10px">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:8px">'
+    +'🏃 Aktivite Dağılımı Gerçekçilik '
+    +'<span style="color:'+scoreColor(actDist.realism_score||0)+';font-size:11px">'
+    +'· KL-Div: '+actDist.kl_divergence+' · Skor: '+actDist.realism_score+'</span></div>'
+    +'<table style="width:100%;border-collapse:collapse"><thead><tr>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:left;color:var(--text2)">Tip</th>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:left;color:var(--text2)">Üretilen</th>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:center;color:var(--text2)">Beklenen</th>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:center;color:var(--text2)">Durum</th>'
+    +'</tr></thead><tbody>'+actRows+'</tbody></table></div>'
+    +'<div style="background:var(--surface);border-radius:10px;padding:12px;border:1px solid var(--border)">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:6px">📅 Günlük Düzenlilik Analizi</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">'
+    +'<div>Uyanış saati std: <b>'+(wakeStd != null ? wakeStd+' saat' : '—')+'</b></div>'
+    +'<div>Düzenlilik skoru: <b style="color:'+scoreColor(reg.regularity_score||0)+'">'+(reg.regularity_score != null ? reg.regularity_score : '—')+'/100</b></div>'
+    +'<div>Analiz edilen gün: <b>'+reg.wake_times_n+'</b></div>'
+    +'<div>'+regLabel+'</div>'
+    +'</div></div>';
+}
+// ── MARKOV GEÇİŞ ANALİZİ ─────────────────────────────────────────────────────
+
+async function loadMarkovAnalysis(){
+  const sel = document.getElementById("analysis-person-select");
+  if(!sel || !sel.value){ showToast("Önce bir kişi seçin","warn"); return; }
+  const pid = sel.value;
+  const el  = document.getElementById("markov-analysis-content");
+  if(!el) return;
+  el.innerHTML = '<div style="color:var(--text2);padding:20px;text-align:center">🔄 Markov matrisi hesaplanıyor...</div>';
+  try{
+    const res  = await fetch(API+"/markov/"+pid);
+    if(!res.ok){ const e=await res.json(); el.innerHTML='<div style="color:#ef4444;padding:12px">'+e.error+'</div>'; return; }
+    const data = await res.json();
+    renderMarkovAnalysis(data, el);
+  } catch(e){
+    el.innerHTML = '<div style="color:#ef4444;padding:12px">Bağlantı hatası: '+e+'</div>';
+  }
+}
+
+function renderMarkovAnalysis(data, el){
+  const person = data.person;
+  const tops   = data.top_transitions || [];
+  const likely = data.most_likely_next || [];
+
+  const actColors = {
+    "Uyuyor":"#85B7EB","Kahvaltı yapıyor":"#EF9F27","Egzersiz yapıyor":"#534AB7",
+    "Çalışıyor":"#534AB7","Televizyon izliyor":"#5DCAA5","Yemek yiyor":"#EF9F27",
+    "Yürüyüşe çıkıyor":"#534AB7","Okuyuyor":"#5DCAA5","Telefonda konuşuyor":"#5DCAA5",
+    "Alışverişe gidiyor":"#534AB7","Dinleniyor":"#5DCAA5","Pişiriyor":"#EF9F27",
+    "Meditasyon yapıyor":"#9FE1CB","Bisiklet sürüyor":"#534AB7",
+    "Dans ediyor":"#F4C0D1","Yoga yapıyor":"#9FE1CB",
+  };
+
+  function actChip(name){
+    const color = actColors[name] || "#888";
+    const short = name.replace(" yapıyor","").replace(" çıkıyor","").replace(" sürüyor","").replace(" ediyor","").replace(" izliyor","");
+    return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;'
+      +'font-weight:700;background:'+color+'22;color:'+color+';border:1px solid '+color+'55">'+short+'</span>';
+  }
+
+  const likelyHtml = likely.map(function(r){
+    const pct = Math.round(r.max_prob*100);
+    return '<tr>'
+      +'<td style="padding:6px 8px">'+actChip(r.from_activity)+'</td>'
+      +'<td style="padding:6px 8px;text-align:center">→</td>'
+      +'<td style="padding:6px 8px">'+actChip(r.to_activity)+'</td>'
+      +'<td style="padding:6px 8px;text-align:right">'
+      +'<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">'
+      +'<div style="width:60px;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden">'
+      +'<div style="width:'+pct+'%;height:100%;background:#7c3aed;border-radius:3px"></div></div>'
+      +'<span style="font-size:11px;color:var(--text2)">'+pct+'%</span></div></td>'
+      +'</tr>';
+  }).join("");
+
+  const top10 = tops.slice(0,10);
+  const maxCount = top10.length > 0 ? Math.max.apply(null, top10.map(function(r){return r.total_count;})) : 1;
+  const topHtml = top10.map(function(r,i){
+    const barW = Math.round(r.total_count/maxCount*100);
+    return '<tr>'
+      +'<td style="padding:5px 8px;font-size:11px;color:var(--text2)">'+(i+1)+'</td>'
+      +'<td style="padding:5px 8px">'+actChip(r.from_activity)+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:var(--text2)">→</td>'
+      +'<td style="padding:5px 8px">'+actChip(r.to_activity)+'</td>'
+      +'<td style="padding:5px 8px">'
+      +'<div style="display:flex;align-items:center;gap:6px">'
+      +'<div style="width:80px;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden">'
+      +'<div style="width:'+barW+'%;height:100%;background:#7c3aed;border-radius:3px"></div></div>'
+      +'<span style="font-size:11px;color:var(--text2)">'+r.total_count+'x</span></div></td>'
+      +'</tr>';
+  }).join("");
+
+  // Saat bloğu haritası
+  const matrix   = data.matrix || [];
+  const allActs  = [];
+  matrix.forEach(function(r){ if(allActs.indexOf(r.from_activity)===-1) allActs.push(r.from_activity); });
+  allActs.sort();
+  const hbNums   = [1,2,3,4,5,6];
+  const hbShort  = {1:"Sabah",2:"Öğ.önce",3:"Öğle",4:"Öğ.sonra",5:"Akşam",6:"Gece"};
+  const hbMap    = {};
+  matrix.forEach(function(r){
+    const key = r.from_activity+"|"+r.hour_block;
+    if(!hbMap[key] || r.probability > hbMap[key].probability) hbMap[key] = r;
+  });
+
+  let hbHead = '<tr><th style="padding:5px 8px;font-size:10px;text-align:left">Aktivite</th>';
+  hbNums.forEach(function(h){ hbHead += '<th style="padding:5px 8px;font-size:10px;text-align:center">'+hbShort[h]+'</th>'; });
+  hbHead += '</tr>';
+
+  const hbBody = allActs.map(function(act){
+    const actShort = act.replace(" yapıyor","").replace(" çıkıyor","").replace(" sürüyor","").replace(" ediyor","").replace(" izliyor","");
+    let cells = '<td style="padding:4px 8px;font-size:10px">'+actShort+'</td>';
+    hbNums.forEach(function(hb){
+      const r = hbMap[act+"|"+hb];
+      if(!r){ cells += '<td style="padding:4px 6px;text-align:center;font-size:9px;color:var(--text3)">—</td>'; return; }
+      const short = r.to_activity.replace(" yapıyor","").replace(" çıkıyor","").replace(" sürüyor","").replace(" ediyor","").replace(" izliyor","");
+      const pct   = Math.round(r.probability*100);
+      const color = actColors[r.to_activity] || "#888";
+      cells += '<td style="padding:4px 6px;text-align:center">'
+        +'<span style="font-size:9px;color:'+color+';font-weight:700" title="'+r.to_activity+' (%'+pct+')">'+short+'</span>'
+        +'<div style="font-size:8px;color:var(--text3)">%'+pct+'</div></td>';
+    });
+    return '<tr>'+cells+'</tr>';
+  }).join("");
+
+  el.innerHTML =
+    '<div style="font-size:14px;font-weight:800;color:#7c3aed;margin-bottom:12px;'
+    +'padding-bottom:8px;border-bottom:2px solid #7c3aed">'
+    +'🔗 '+person.name+' — Markov Aktivite Geçiş Analizi</div>'
+    +'<div style="font-size:11px;color:var(--text2);margin-bottom:14px">'
+    +data.total_transitions+' farklı aktivite geçiş örüntüsü öğrenildi. '
+    +'Sistem kişinin alışkanlıklarına göre simülasyon üretiyor.</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">'
+    +'<div style="background:var(--surface);border-radius:10px;padding:12px;border:1px solid var(--border)">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:8px">🎯 Aktivite Başına En Olası Geçiş</div>'
+    +'<table style="width:100%;border-collapse:collapse"><thead><tr>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:left;color:var(--text2)">Kaynak</th><th></th>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:left;color:var(--text2)">Hedef</th>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:right;color:var(--text2)">Olasılık</th>'
+    +'</tr></thead><tbody>'+likelyHtml+'</tbody></table></div>'
+    +'<div style="background:var(--surface);border-radius:10px;padding:12px;border:1px solid var(--border)">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:8px">📊 En Sık Aktivite Geçişleri</div>'
+    +'<table style="width:100%;border-collapse:collapse"><thead><tr>'
+    +'<th style="padding:4px 8px;font-size:10px;color:var(--text2)">#</th>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:left;color:var(--text2)">Kaynak</th><th></th>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:left;color:var(--text2)">Hedef</th>'
+    +'<th style="padding:4px 8px;font-size:10px;text-align:left;color:var(--text2)">Sıklık</th>'
+    +'</tr></thead><tbody>'+topHtml+'</tbody></table></div></div>'
+    +'<div style="background:var(--surface);border-radius:10px;padding:12px;border:1px solid var(--border);margin-bottom:10px">'
+    +'<div style="font-size:12px;font-weight:700;margin-bottom:8px">🕐 Saate Göre En Olası Sonraki Aktivite</div>'
+    +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:500px">'
+    +'<thead style="background:var(--surface2)">'+hbHead+'</thead>'
+    +'<tbody>'+hbBody+'</tbody></table></div></div>'
+    +'<button onclick="rebuildMarkov('+person.id+')"'
+    +' style="background:var(--surface2);border:1px solid var(--border);color:var(--text);'
+    +'padding:6px 14px;border-radius:6px;cursor:pointer;font-size:11px">🔄 Matrisi Yeniden Hesapla</button>';
+}
+
+async function rebuildMarkov(pid){
+  showToast("Markov matrisi yeniden hesaplanıyor...","info");
+  const res = await fetch(API+"/markov/"+pid+"/rebuild", {method:"POST"});
+  const d   = await res.json();
+  if(d.ok){
+    showToast("Markov matrisi güncellendi","ok");
+    loadMarkovAnalysis();
+  } else {
+    showToast(d.message || "Hata","warn");
+  }
+}
+
+// ── ÖRÜNTÜ ANALİZİ DAĞILIM AYARLARI ─────────────────────────────────────────
+
+const PATTERN_METRIC_LABELS = {
+  wake_hour:       {label:"Uyanış Saati",        icon:"⏰"},
+  sleep_hour:      {label:"Uyku Saati",           icon:"🌙"},
+  sleep_mins:      {label:"Uyku Süresi (dk)",     icon:"😴"},
+  first_act_hour:  {label:"İlk Aktivite Saati",   icon:"🌅"},
+  exercise_hour:   {label:"Egzersiz Saati",       icon:"🏃"},
+  exercise_mins:   {label:"Egzersiz Süresi (dk)", icon:"⏱"},
+  outdoor_hour:    {label:"Dışarı Çıkış Saati",   icon:"🚶"},
+  first_meal_hour: {label:"İlk Yemek Saati",      icon:"🍳"},
+  last_meal_hour:  {label:"Son Yemek Saati",      icon:"🍽"},
+  meal_count:      {label:"Yemek Sayısı",         icon:"🥗"},
+  steps:           {label:"Adım Sayısı",          icon:"👟"},
+  calories:        {label:"Kalori (kcal)",        icon:"🔥"},
+  active_mins:     {label:"Aktif Süre (dk)",      icon:"⚡"},
+  avg_hr:          {label:"Ort. Nabız (bpm)",     icon:"❤️"},
+  avg_spo2:        {label:"Ort. SpO₂ (%)",        icon:"🫁"},
+  avg_stress:      {label:"Ort. Stres (/100)",    icon:"🧠"},
+  avg_hrv:         {label:"Ort. HRV",             icon:"💓"},
+};
+
+const PATTERN_DIST_PARAMS = {
+  normal:      [{key:"mean",label:"Ortalama (μ)",default:0},{key:"std",label:"Std Sapma (σ)",default:1}],
+  uniform:     [{key:"low",label:"Alt Sınır",default:0},{key:"high",label:"Üst Sınır",default:100}],
+  exponential: [{key:"scale",label:"Ölçek (1/λ)",default:20},{key:"offset",label:"Başlangıç",default:0}],
+  poisson:     [{key:"lam",label:"Lambda (λ)",default:3}],
+  lognormal:   [{key:"mean",label:"μ (log)",default:4},{key:"sigma",label:"σ (log)",default:0.5}],
+  triangular:  [{key:"low",label:"Alt",default:0},{key:"mode",label:"Tepe",default:50},{key:"high",label:"Üst",default:100}],
+  beta:        [{key:"alpha",label:"α",default:2},{key:"beta",label:"β",default:5},{key:"scale",label:"Ölçek",default:100}],
+};
+
+let patternDistSettings = {};
+
+async function loadPatternDistSettings(){
+  // Analiz sekmesinde seçili kişinin pid'ini al
+  const sel = document.getElementById("analysis-person-select");
+  const pid = sel ? sel.value : "";
+  const url = API+"/pattern_distributions"+(pid?"?pid="+pid:"");
+  try{
+    const res  = await fetch(url);
+    const data = await res.json();
+    patternDistSettings = {};
+    data.forEach(d=>{
+      try{
+        patternDistSettings[d.metric] = {
+          distribution: d.distribution,
+          params: JSON.parse(d.params),
+          // Veriden hesaplanan parametreler (her dağılım için)
+          computed: d.computed_params || {}
+        };
+      }
+      catch(e){ patternDistSettings[d.metric]={distribution:"normal",params:{},computed:{}}; }
+    });
+  }catch(e){ console.error("Dağılım yüklenemedi",e); }
+}
+
+function togglePatternDistModal(){
+  const modal = document.getElementById("pattern-dist-modal");
+  if(!modal) return;
+  if(modal.style.display==="none"){
+    modal.style.display="block";
+    loadPatternDistSettings().then(()=>renderPatternDistSettings());
+  } else {
+    modal.style.display="none";
+  }
+}
+
+function renderPatternDistSettings(){
+  const area = document.getElementById("pattern-dist-settings-area");
+  if(!area) return;
+  const metrics = Object.keys(PATTERN_METRIC_LABELS);
+  const distNames = {normal:"Normal",uniform:"Düzgün",exponential:"Üstel",
+    poisson:"Poisson",lognormal:"Log-Normal",triangular:"Üçgen",beta:"Beta"};
+
+  area.innerHTML = metrics.map(metric=>{
+    const meta     = PATTERN_METRIC_LABELS[metric];
+    const cur      = patternDistSettings[metric] || {distribution:"normal",params:{},computed:{}};
+    const computed = cur.computed || {};  // veriden hesaplanan parametreler
+
+    const distOpts = Object.keys(PATTERN_DIST_PARAMS).map(d=>
+      `<option value="${d}" ${cur.distribution===d?"selected":""}>${distNames[d]}</option>`
+    ).join("");
+
+    // Seçili dağılım için parametre inputları
+    // Öncelik: kaydedilmiş params > veriden hesaplanan > varsayılan
+    const paramDefs = PATTERN_DIST_PARAMS[cur.distribution] || [];
+    const computedForDist = computed[cur.distribution] || {};
+    const paramHtml = paramDefs.map(p=>{
+      // Önce kayıtlı değer, yoksa veriden hesaplanan, yoksa varsayılan
+      const val = cur.params[p.key] !== undefined
+        ? cur.params[p.key]
+        : (computedForDist[p.key] !== undefined ? computedForDist[p.key] : p.default);
+      const isComputed = cur.params[p.key] === undefined && computedForDist[p.key] !== undefined;
+      return `<div style="display:flex;flex-direction:column;gap:1px">
+        <span style="font-size:9px;color:var(--text3)">${p.label}${isComputed?' 📊':''}</span>
+        <input type="number" step="any" value="${val}" id="pdp-${metric}-${p.key}"
+          style="width:70px;padding:3px 5px;border-radius:4px;
+          border:1px solid ${isComputed?'#1d9e75':'var(--border)'};
+          background:var(--surface2);color:var(--text);font-size:11px"
+          title="${isComputed?'Veriden hesaplandı — istersen değiştirebilirsin':''}"/>
+      </div>`;
+    }).join("");
+
+    return `<div style="background:var(--surface2);border-radius:8px;padding:8px 10px">
+      <div style="font-size:11px;font-weight:700;margin-bottom:5px">${meta.icon} ${meta.label}</div>
+      <select id="pds-${metric}" onchange="onPatternDistChange('${metric}')"
+        style="width:100%;font-size:11px;padding:3px;border-radius:4px;border:1px solid var(--border);
+        background:var(--surface2);color:var(--text);margin-bottom:6px">${distOpts}</select>
+      <div id="pdparams-${metric}" style="display:flex;gap:8px;flex-wrap:wrap">${paramHtml}</div>
+    </div>`;
+  }).join("");
+}
+
+function onPatternDistChange(metric){
+  const sel      = document.getElementById("pds-"+metric);
+  const dist     = sel.value;
+  const defs     = PATTERN_DIST_PARAMS[dist] || [];
+  const cur      = patternDistSettings[metric] || {params:{},computed:{}};
+  const computed = (cur.computed || {})[dist] || {};
+
+  const html = defs.map(p=>{
+    // Veriden hesaplanan parametreyi varsayılan olarak göster
+    const val = computed[p.key] !== undefined ? computed[p.key] : p.default;
+    const isComputed = computed[p.key] !== undefined;
+    return `<div style="display:flex;flex-direction:column;gap:1px">
+      <span style="font-size:9px;color:var(--text3)">${p.label}${isComputed?' 📊':''}</span>
+      <input type="number" step="any" value="${val}" id="pdp-${metric}-${p.key}"
+        style="width:70px;padding:3px 5px;border-radius:4px;
+        border:1px solid ${isComputed?'#1d9e75':'var(--border)'};
+        background:var(--surface2);color:var(--text);font-size:11px"
+        title="${isComputed?'Veriden hesaplandı — istersen değiştirebilirsin':''}"/>
+    </div>`;
+  }).join("");
+  document.getElementById("pdparams-"+metric).innerHTML = html;
+}
+
+async function savePatternDistSettings(){
+  const items = [];
+  Object.keys(PATTERN_METRIC_LABELS).forEach(metric=>{
+    const selEl = document.getElementById("pds-"+metric);
+    if(!selEl) return;
+    const dist   = selEl.value;
+    const defs   = PATTERN_DIST_PARAMS[dist] || [];
+    const params = {};
+    defs.forEach(p=>{
+      const el = document.getElementById("pdp-"+metric+"-"+p.key);
+      if(el) params[p.key] = parseFloat(el.value) || p.default;
+    });
+    items.push({metric, distribution:dist, params});
+    patternDistSettings[metric] = {distribution:dist, params};
+  });
+  await fetch(API+"/pattern_distributions",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify(items)});
+  const msg = document.getElementById("pattern-dist-save-msg");
+  if(msg){ msg.textContent="✅ Kaydedildi — analizi yeniden çalıştırın"; setTimeout(()=>{msg.textContent="";},3000); }
+}
+
+async function resetPatternDistSettings(){
   const defaults = [
-    {metric:"heart_rate", distribution:"normal",     params:{mean:75,  std:10}},
-    {metric:"spo2",       distribution:"normal",     params:{mean:97.5,std:0.8}},
-    {metric:"skin_temp",  distribution:"normal",     params:{mean:36.5,std:0.2}},
-    {metric:"hrv",        distribution:"normal",     params:{mean:45,  std:12}},
-    {metric:"stress",     distribution:"exponential",params:{scale:25, offset:5}},
-    {metric:"steps",      distribution:"lognormal",  params:{mean:8.2, sigma:0.9}},
-    {metric:"sleep_mins", distribution:"triangular", params:{low:300,  mode:450,high:560}},
-    {metric:"active_mins",distribution:"normal",     params:{mean:60,  std:25}},
+    {metric:"wake_hour",      distribution:"normal",    params:{mean:7.5,  std:0.5}},
+    {metric:"sleep_hour",     distribution:"normal",    params:{mean:23.0, std:0.5}},
+    {metric:"sleep_mins",     distribution:"triangular",params:{low:300,   mode:450,high:540}},
+    {metric:"first_act_hour", distribution:"normal",    params:{mean:8.0,  std:0.5}},
+    {metric:"exercise_hour",  distribution:"normal",    params:{mean:9.0,  std:1.0}},
+    {metric:"exercise_mins",  distribution:"exponential",params:{scale:30, offset:0}},
+    {metric:"outdoor_hour",   distribution:"normal",    params:{mean:10.0, std:1.5}},
+    {metric:"first_meal_hour",distribution:"normal",    params:{mean:8.0,  std:0.5}},
+    {metric:"last_meal_hour", distribution:"normal",    params:{mean:19.0, std:0.5}},
+    {metric:"meal_count",     distribution:"poisson",   params:{lam:3}},
+    {metric:"steps",          distribution:"lognormal", params:{mean:8.2,  sigma:0.8}},
+    {metric:"calories",       distribution:"normal",    params:{mean:2000, std:400}},
+    {metric:"active_mins",    distribution:"normal",    params:{mean:60,   std:20}},
+    {metric:"avg_hr",         distribution:"normal",    params:{mean:75,   std:10}},
+    {metric:"avg_spo2",       distribution:"normal",    params:{mean:97.5, std:0.8}},
+    {metric:"avg_stress",     distribution:"exponential",params:{scale:25, offset:10}},
+    {metric:"avg_hrv",        distribution:"normal",    params:{mean:45,   std:12}},
   ];
-  await fetch(API+"/distributions",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(defaults)});
-  loadDistSettings();
-  showToast("Varsayılan ayarlara döndürüldü","ok");
+  await fetch(API+"/pattern_distributions",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify(defaults)});
+  await loadPatternDistSettings();
+  renderPatternDistSettings();
+  showToast("Varsayılan dağılımlara döndürüldü","ok");
 }
 
 // ── ÖRÜNTÜ & SAPMA ANALİZİ ──────────────────────────────────────────────────
