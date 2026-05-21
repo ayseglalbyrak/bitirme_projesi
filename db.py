@@ -182,6 +182,19 @@ def init_db():
         distribution_used TEXT DEFAULT 'normal', metadata TEXT,
         recorded_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
 
+    # Kişiye özgü istatistiksel profil tablosu
+    c.execute("""CREATE TABLE IF NOT EXISTS personal_stats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        person_id INTEGER NOT NULL,
+        metric TEXT NOT NULL,
+        activity_type TEXT NOT NULL,
+        mean REAL NOT NULL,
+        std REAL NOT NULL,
+        n INTEGER DEFAULT 0,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(person_id, metric, activity_type),
+        FOREIGN KEY (person_id) REFERENCES persons(id))""")
+
     # Markov geçiş matrisi tablosu
     c.execute("""CREATE TABLE IF NOT EXISTS markov_transitions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

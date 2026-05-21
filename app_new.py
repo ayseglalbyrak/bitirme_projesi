@@ -14,6 +14,7 @@ from db import init_db, get_db
 from simulator import (
     AVATAR_COLORS, seed_historical_data,
     check_smart_alerts, simulation_loop,
+    build_personal_stats,
 )
 import simulator as _sim
 from routes import bp
@@ -84,6 +85,13 @@ if __name__ == "__main__":
     conn2 = get_db()
     check_smart_alerts(conn2, socketio)
     conn2.close()
+
+    # Kişisel istatistiksel profil oluştur
+    conn3 = get_db()
+    for p in conn3.execute("SELECT id FROM persons WHERE active=1").fetchall():
+        build_personal_stats(conn3, p["id"])
+    conn3.close()
+    print("Kişisel istatistik profilleri oluşturuldu.")
 
     # Simülasyon döngüsünü ayrı thread'de başlat
     t = threading.Thread(target=simulation_loop, args=(socketio,), daemon=True)

@@ -16,6 +16,7 @@ from simulator import (
     invalidate_dist_cache, invalidate_pattern_dist_cache,
     compute_health_score, _compute_metric_params,
     build_markov_matrix, get_markov_matrix, invalidate_markov_cache,
+    build_personal_stats,
 )
 import simulator as _sim
 
@@ -793,6 +794,26 @@ def get_data_quality(pid):
         realism_score = round((mean_score * 0.3 + std_score * 0.25 +
                                range_score * 0.2 + normal_score * 0.25))
 
+        # Histogram verisi (görselleştirme için)
+        import math as _mh
+        hist_bins   = 12
+        bin_w_h     = (mx - mn) / hist_bins if mx > mn else 1
+        hist_counts = [0] * hist_bins
+        for v in vals:
+            idx = int((v - mn) / bin_w_h)
+            idx = max(0, min(hist_bins - 1, idx))
+            hist_counts[idx] += 1
+        hist_max_count = max(hist_counts) if hist_counts else 1
+        normal_curve = []
+        for i in range(hist_bins):
+            x_mid = mn + (i + 0.5) * bin_w_h
+            if std > 0:
+                p = (1 / (std * _mh.sqrt(2 * _mh.pi))) * _mh.exp(-0.5 * ((x_mid - mean) / std) ** 2)
+                normal_curve.append(round(p * len(vals) * bin_w_h, 2))
+            else:
+                normal_curve.append(0)
+        hist_labels = [round(mn + i * bin_w_h, 1) for i in range(hist_bins)]
+
         return {
             "name":           name,
             "unit":           unit,
@@ -813,6 +834,13 @@ def get_data_quality(pid):
             "std_score":      round(std_score),
             "range_score":    round(range_score),
             "normal_score":   round(normal_score),
+            "histogram": {
+                "counts":       hist_counts,
+                "labels":       hist_labels,
+                "normal_curve": normal_curve,
+                "max_count":    hist_max_count,
+                "bin_width":    round(bin_w_h, 2),
+            },
         }
 
     # Beklenen değerler (tıbbi literatürden)
@@ -934,6 +962,47 @@ def get_data_quality(pid):
             "overall":          overall_score,
         }
     })
+
+
+# ── KİŞİSEL İSTATİSTİKSEL PROFİL ─────────────────────────────────────────────
+
+@bp.route("/api/personal_stats/<int:pid>", methods=["GET"])
+def get_personal_stats_endpoint(pid):
+    """Kişinin aktivite bazlı istatistiksel profilini döndür."""
+    conn   = get_db()
+    person = conn.execute("SELECT * FROM persons WHERE id=?", (pid,)).fetchone()
+    if not person:
+        conn.close()
+        return jsonify({"error": "Kişi bulunamadı"}), 404
+
+    rows = conn.execute("""
+        SELECT metric, activity_type, mean, std, n, updated_at
+        FROM personal_stats WHERE person_id=?
+        ORDER BY metric, activity_type
+    """, (pid,)).fetchall()
+
+    if not rows:
+        build_personal_stats(conn, pid)
+        rows = conn.execute("""
+            SELECT metric, activity_type, mean, std, n, updated_at
+            FROM personal_stats WHERE person_id=?
+            ORDER BY metric, activity_type
+        """, (pid,)).fetchall()
+
+    conn.close()
+    return jsonify({
+        "person": dict(person),
+        "stats":  [dict(r) for r in rows],
+    })
+
+
+@bp.route("/api/personal_stats/<int:pid>/rebuild", methods=["POST"])
+def rebuild_personal_stats(pid):
+    """Kişisel istatistiksel profili yeniden oluştur."""
+    conn = get_db()
+    build_personal_stats(conn, pid)
+    conn.close()
+    return jsonify({"ok": True, "message": "Profil güncellendi"})
 
 # ── MARKOV GEÇİŞ MATRİSİ ─────────────────────────────────────────────────────
 

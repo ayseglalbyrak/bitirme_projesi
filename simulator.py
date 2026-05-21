@@ -543,6 +543,164 @@ def seed_historical_data(conn, pid, days_back=14):
 
 # ── ANOMALİ & UYARI ───────────────────────────────────────────────────────────
 
+
+def build_personal_stats(conn, pid):
+    """
+    Kişinin son 7 günlük sensör verisinden kişiye özgü
+    istatistiksel profil hesapla (mean, std) — aktivite tipine göre ayrı.
+    Sonuçları personal_stats tablosuna kaydet.
+    """
+    import statistics as _stats
+    c = conn.cursor()
+    now_iso = datetime.now().isoformat()
+
+    metrics = ["heart_rate", "spo2", "skin_temp", "hrv", "stress_level"]
+    act_types = ["sleep", "active", "rest", "meal"]
+
+    for act_type in act_types:
+        rows = c.execute("""
+            SELECT heart_rate, spo2, skin_temp, hrv, stress_level
+            FROM sensor_log
+            WHERE person_id=? AND activity_type=?
+              AND recorded_at >= datetime('now','-7 days')
+        """, (pid, act_type)).fetchall()
+
+        if len(rows) < 5:
+            continue
+
+        for metric in metrics:
+            vals = [r[metric] for r in rows if r[metric] and r[metric] > 0]
+            if len(vals) < 3:
+                continue
+            mean = sum(vals) / len(vals)
+            std  = _stats.stdev(vals) if len(vals) > 1 else 1.0
+            c.execute("""
+                INSERT INTO personal_stats
+                    (person_id, metric, activity_type, mean, std, n, updated_at)
+                VALUES (?,?,?,?,?,?,?)
+                ON CONFLICT(person_id, metric, activity_type) DO UPDATE SET
+                    mean=excluded.mean, std=excluded.std,
+                    n=excluded.n, updated_at=excluded.updated_at
+            """, (pid, metric, act_type, round(mean,3), round(max(std,0.1),3), len(vals), now_iso))
+
+    conn.commit()
+
+
+# Kişisel istatistik cache — pid → {data, timestamp}
+_personal_stats_cache = {}
+
+def get_personal_stats(conn, pid):
+    """Kişinin istatistiksel profilini önbellekten getir (10 dk cache)."""
+    now_t = time.time()
+    if pid in _personal_stats_cache and now_t - _personal_stats_cache[pid]["ts"] < 600:
+        return _personal_stats_cache[pid]["data"]
+
+    rows = conn.execute("""
+        SELECT metric, activity_type, mean, std
+        FROM personal_stats WHERE person_id=?
+    """, (pid,)).fetchall()
+
+    # {metric: {activity_type: {mean, std}}} formatında düzenle
+    data = {}
+    for r in rows:
+        if r["metric"] not in data:
+            data[r["metric"]] = {}
+        data[r["metric"]][r["activity_type"]] = {
+            "mean": r["mean"], "std": r["std"]
+        }
+
+    if not data:
+        build_personal_stats(conn, pid)
+        rows = conn.execute("""
+            SELECT metric, activity_type, mean, std
+            FROM personal_stats WHERE person_id=?
+        """, (pid,)).fetchall()
+        for r in rows:
+            if r["metric"] not in data:
+                data[r["metric"]] = {}
+            data[r["metric"]][r["activity_type"]] = {
+                "mean": r["mean"], "std": r["std"]
+            }
+
+    _personal_stats_cache[pid] = {"data": data, "ts": now_t}
+    return data
+
+
+def check_statistical_anomalies(pid, s, conn, socketio=None):
+    """
+    Kişinin kendi istatistiksel profiline göre anomali tespiti.
+    Z-score bazlı: |değer - kişisel_ortalama| / kişisel_std > eşik
+    
+    Kural bazlı sistemin tamamlayıcısı — ikisi birlikte çalışır.
+    """
+    c = conn.cursor()
+    activity_type = s.get("activity_type", "rest")
+    personal_stats = get_personal_stats(conn, pid)
+
+    # Z-score eşikleri
+    WARN_THRESHOLD     = 2.5   # uyarı
+    CRITICAL_THRESHOLD = 3.5   # kritik
+
+    # Kontrol edilecek metrikler ve Türkçe açıklamalar
+    check_metrics = {
+        "heart_rate":   ("nabız", "bpm"),
+        "spo2":         ("SpO₂", "%"),
+        "skin_temp":    ("cilt sıcaklığı", "°C"),
+        "hrv":          ("HRV", "ms"),
+        "stress_level": ("stres seviyesi", "/100"),
+    }
+
+    for metric, (metric_tr, unit) in check_metrics.items():
+        val = s.get(metric)
+        if val is None or val <= 0:
+            continue
+
+        # Aktivite tipine göre kişisel norm
+        stat = (personal_stats.get(metric, {}).get(activity_type) or
+                personal_stats.get(metric, {}).get("rest"))
+        if not stat:
+            continue
+
+        mean = stat["mean"]
+        std  = max(stat["std"], 0.5)
+        z    = abs(val - mean) / std
+
+        if z < WARN_THRESHOLD:
+            continue
+
+        severity = "critical" if z >= CRITICAL_THRESHOLD else "warning"
+        direction = "yüksek" if val > mean else "düşük"
+        z_rounded = round(z, 1)
+
+        msg_tr = f"{metric_tr.capitalize()} kişisel normdan {z_rounded} std {direction} ({val}{unit}, norm: {round(mean,1)})"
+        msg_en = f"{metric_tr} {z_rounded} std {direction} from personal norm ({val}{unit}, norm: {round(mean,1)})"
+
+        # Son 20 dakikada aynı metrik için istatistiksel anomali var mı?
+        exists = c.execute("""
+            SELECT id FROM anomalies WHERE person_id=? AND metric=?
+              AND message_tr LIKE '%kişisel normdan%'
+              AND datetime(detected_at) > datetime('now','-20 minutes')
+        """, (pid, metric)).fetchone()
+
+        if not exists:
+            c.execute("""INSERT INTO anomalies
+                (person_id,message_tr,message_en,metric,value,severity,detected_at)
+                VALUES (?,?,?,?,?,?,?)""",
+                (pid, msg_tr, msg_en, metric, round(val,1), severity, datetime.now().isoformat()))
+            if socketio:
+                socketio.emit("anomaly", {
+                    "person_id":   pid,
+                    "message_tr":  msg_tr,
+                    "message_en":  msg_en,
+                    "metric":      metric,
+                    "value":       round(val, 1),
+                    "severity":    severity,
+                    "z_score":     z_rounded,
+                    "personal_mean": round(mean, 1),
+                    "detected_at": datetime.now().isoformat(),
+                })
+
+
 def check_anomalies(pid, s, conn, socketio=None):
     """Anlık değerleri anomali kurallarıyla karşılaştır."""
     c = conn.cursor()
@@ -816,6 +974,7 @@ def simulation_loop(socketio):
                 conn.commit()
                 upd = dict(c.execute("SELECT * FROM current_state WHERE person_id=?", (pid,)).fetchone())
                 check_anomalies(pid, upd, conn, socketio)
+                check_statistical_anomalies(pid, upd, conn, socketio)
                 conn.commit()
                 person_row = conn.execute("SELECT * FROM persons WHERE id=?", (pid,)).fetchone()
                 if person_row:

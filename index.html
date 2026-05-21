@@ -2187,6 +2187,49 @@ function renderQualityAnalysis(data, el){
       +'</div>';
   }).join("");
 
+  
+    // Histogram SVG
+    function drawHistogram(hist, metric){
+      if(!hist || !hist.counts || !hist.counts.length) return '';
+      var W=280,H=80,PAD=4;
+      var n=hist.counts.length;
+      var barW=(W-PAD*2)/n;
+      var nc=hist.normal_curve||[];
+      var maxV=Math.max(hist.max_count, nc.length ? Math.max.apply(null,nc) : 1, 1);
+      var scY=function(v){return H-PAD-(v/maxV)*(H-PAD*2);};
+      var bars_svg='';
+      for(var i=0;i<n;i++){
+        var x=PAD+i*barW;
+        var h=(hist.counts[i]/maxV)*(H-PAD*2);
+        var y=H-PAD-h;
+        bars_svg+='<rect x="'+(x+1)+'" y="'+y+'" width="'+(barW-2)+'" height="'+h+'" fill="#7c3aed" opacity="0.6" rx="1"/>';
+      }
+      var curve_pts='';
+      for(var i=0;i<nc.length;i++){
+        var x=PAD+(i+0.5)*barW;
+        var y=scY(nc[i]);
+        curve_pts+=(i===0?'':' ')+x.toFixed(1)+','+y.toFixed(1);
+      }
+      var range=Math.max(metric.max-metric.min,0.1);
+      var mean_x=PAD+((metric.mean-metric.min)/range)*(W-PAD*2);
+      var exp_x =PAD+((metric.expected_mean-metric.min)/range)*(W-PAD*2);
+      mean_x=Math.max(PAD,Math.min(W-PAD,mean_x));
+      exp_x =Math.max(PAD,Math.min(W-PAD,exp_x));
+      return '<svg width="'+W+'" height="'+H+'" style="display:block;margin-top:8px">'
+        +'<rect width="'+W+'" height="'+H+'" fill="var(--surface2)" rx="4"/>'
+        +bars_svg
+        +(curve_pts?'<polyline points="'+curve_pts+'" fill="none" stroke="#22c55e" stroke-width="1.5"/>':'')
+        +'<line x1="'+mean_x.toFixed(1)+'" y1="'+PAD+'" x2="'+mean_x.toFixed(1)+'" y2="'+(H-PAD)+'" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="3,2"/>'
+        +'<line x1="'+exp_x.toFixed(1)+'" y1="'+PAD+'" x2="'+exp_x.toFixed(1)+'" y2="'+(H-PAD)+'" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="3,2"/>'
+        +'</svg>'
+        +'<div style="display:flex;gap:8px;font-size:8px;color:var(--text2);margin-top:2px">'
+        +'<span style="color:#7c3aed">■ Üretilen</span>'
+        +'<span style="color:#22c55e">— Teorik</span>'
+        +'<span style="color:#f59e0b">-- Ort.</span>'
+        +'<span style="color:#60a5fa">-- Bek.</span>'
+        +'</div>';
+    }
+
   const metricCards = metrics.map(function(m){
     const klLabel = m.kl_divergence < 0.1 ? "✅ Normal dağılıma uygun"
                   : m.kl_divergence < 0.3 ? "⚠️ Hafif sapma" : "❌ Belirgin sapma";
@@ -2213,6 +2256,7 @@ function renderQualityAnalysis(data, el){
       +'<div><div style="font-size:12px;font-weight:700">'+m.name+' <span style="color:var(--text2);font-weight:400">('+m.unit+')</span></div>'
       +'<div style="font-size:10px;color:var(--text2);margin-top:2px">'+m.n+' ölçüm · '+data.period_days+' gün</div></div>'
       +gauge(m.realism_score, 52)+'</div>'
+      +drawHistogram(m.histogram, m)
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px;font-size:10px">'
       +'<div>Ortalama: <b>'+m.mean+' '+m.unit+'</b> <span style="color:var(--text2)">(beklenen: '+m.expected_mean+')</span></div>'
       +'<div>Std: <b>'+m.std+'</b> <span style="color:var(--text2)">(beklenen: '+m.expected_std+')</span></div>'
