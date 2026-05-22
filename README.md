@@ -170,7 +170,74 @@ simulasyon_v2/
 
 ## Ekran Görüntüleri
 
-*(yakında eklenecek)*
+### 🏠 Dashboard — Kişi Kartları
+![Dashboard](screenshots/01_dashboard.png)
+
+### 📈 Canlı Grafik
+![Canlı Grafik](screenshots/02_canli_grafik.png)
+
+### 🗺️ Harita
+![Harita](screenshots/03_harita.png)
+
+### ⚖️ Karşılaştırma
+![Karşılaştırma](screenshots/04_karsilastirma.png)
+
+### ⚠️ Anomaliler
+![Anomaliler](screenshots/05_anomaliler.png)
+
+### 📅 Haftalık Görünüm
+![Haftalık](screenshots/06_haftalik.png)
+
+### 🔬 Genel Analiz
+![Genel Analiz](screenshots/07_analiz_genel.png)
+
+### 💚 Sağlık Skoru
+![Sağlık Skoru](screenshots/08_saglik_skoru.png)
+
+### ❤️ Nabız Trend
+![Nabız Trend](screenshots/09_nabiz_trend.png)
+
+### ⏱️ Aktif Süre
+![Aktif Süre](screenshots/10_aktif_sure.png)
+
+### 🌡️ Isı Haritası
+![Isı Haritası](screenshots/11_isi_haritasi.png)
+
+### 📊 Örüntü & Sapma
+![Örüntü Sapma](screenshots/12_oruntu_sapma.png)
+
+### ⚙️ Dağılım Ayarları
+![Dağılım Ayarları](screenshots/13_dagilim_ayarlari.png)
+
+### 🕐 Zaman Örüntüleri
+![Zaman Örüntüleri](screenshots/14_zaman_oruntuleri.png)
+
+### 💓 Biyometrik Metrikler
+![Biyometrik Metrikler](screenshots/15_biyometrik_metrikler.png)
+
+### 🔮 Gelecek Tahmini
+![Gelecek Tahmini](screenshots/16_gelecek_tahmin.png)
+
+### 🔗 Markov Geçiş Matrisi
+![Markov Geçiş](screenshots/17_markov_gecis.png)
+
+### 🕐 Markov Saat Haritası
+![Markov Saat Haritası](screenshots/18_markov_saat_haritasi.png)
+
+### ✅ Veri Kalite Analizi
+![Veri Kalite](screenshots/19_veri_kalite.png)
+
+### 📉 Aktivite Dağılımı
+![Aktivite Dağılımı](screenshots/20_aktivite_dagilimi.png)
+
+### 🔔 Akıllı Uyarılar
+![Akıllı Uyarılar](screenshots/21_akilli_uyarilar.png)
+
+### 📋 Zaman Çizelgesi
+![Zaman Çizelgesi](screenshots/22_zaman_cizelgesi.png)
+
+### 🤝 Veri Katkısı
+![Veri Katkısı](screenshots/23_veri_katkisi.png)
 
 ---
 
