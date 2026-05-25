@@ -3165,10 +3165,11 @@ async function addCustomActivity(){
     if(el) distParams[p.key] = parseFloat(el.value) || p.default;
   });
 
-  // hr_base dağılım parametrelerinden türet
-  const hrBase = distParams.mean || distParams.low
-    ? Math.round((distParams.mean || ((distParams.low||0)+(distParams.high||100))/2))
-    : (hrVal ? parseInt(hrVal) : 75);
+  // Biyometrik alanlar: kullanıcı değer girdiyse kullan, boşsa 0 gönder.
+  // Backend 0'ı NULL'a dönüştürür → makine/süreç profilinde biyometrik üretilmez.
+  const hrBase       = (hrVal     && parseInt(hrVal)   > 0) ? parseInt(hrVal)   : 0;
+  const stressBaseVal= (stressVal && parseInt(stressVal)>0) ? parseInt(stressVal): 0;
+  const spo2BaseVal  = (spo2Val   && parseFloat(spo2Val)>0) ? parseFloat(spo2Val): 0;
 
   await fetch(API+"/custom_activities",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
@@ -3179,10 +3180,10 @@ async function addCustomActivity(){
       duration_min:      parseInt(document.getElementById("act-dur-min").value),
       duration_max:      parseInt(document.getElementById("act-dur-max").value),
       frequency_per_day: parseInt(document.getElementById("act-freq").value),
-      hr_base:           hrBase,
+      hr_base:           hrBase,        // 0 → backend NULL yapar
       hr_noise:          distParams.std || 8,
-      stress_base:       stressVal ? parseInt(stressVal) : 30,
-      spo2_base:         spo2Val   ? parseFloat(spo2Val) : 98.0,
+      stress_base:       stressBaseVal, // 0 → backend NULL yapar
+      spo2_base:         spo2BaseVal,   // 0 → backend NULL yapar
       icon:              document.getElementById("act-icon").value.trim()||"🔵",
       distribution:      dist,
       dist_params:       distParams,

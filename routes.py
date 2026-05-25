@@ -1119,18 +1119,36 @@ def get_custom_activities():
 def add_custom_activity():
     d=request.json; name=d.get("name","").strip()
     if not name: return jsonify({"error":"İsim zorunlu"}),400
+
+    # Biyometrik alanlar opsiyoneldir.
+    # Kullanıcı 0 veya boş gönderirse None (NULL) olarak sakla.
+    # Makine/süreç profillerinde nabız, SpO₂, stres biyolojik olarak anlamsızdır.
+    def opt_int(key):
+        v = d.get(key)
+        if v is None or str(v).strip() == "" or int(v) == 0:
+            return None
+        return int(v)
+    def opt_float(key):
+        v = d.get(key)
+        if v is None or str(v).strip() == "" or float(v) == 0:
+            return None
+        return float(v)
+
     conn=get_db(); c=conn.cursor()
     c.execute("""INSERT INTO custom_activities
         (name,description,environment,hour_start,hour_end,duration_min,duration_max,
          frequency_per_day,hr_base,hr_noise,spo2_base,stress_base,icon,color,distribution,dist_params)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (name,d.get("description",""),d.get("environment","genel"),
-         int(d.get("hour_start",8)),int(d.get("hour_end",18)),
-         int(d.get("duration_min",10)),int(d.get("duration_max",60)),
-         int(d.get("frequency_per_day",1)),int(d.get("hr_base",75)),
-         int(d.get("hr_noise",8)),float(d.get("spo2_base",98.0)),
-         int(d.get("stress_base",30)),d.get("icon","🔵"),d.get("color","#534AB7"),
-         d.get("distribution","normal"),_json.dumps(d.get("dist_params",{}))))
+        (name, d.get("description",""), d.get("environment","genel"),
+         int(d.get("hour_start",8)), int(d.get("hour_end",18)),
+         int(d.get("duration_min",10)), int(d.get("duration_max",60)),
+         int(d.get("frequency_per_day",1)),
+         opt_int("hr_base"),      # None → biyometrik yok
+         opt_int("hr_noise"),
+         opt_float("spo2_base"),  # None → biyometrik yok
+         opt_int("stress_base"),  # None → biyometrik yok
+         d.get("icon","🔵"), d.get("color","#534AB7"),
+         d.get("distribution","normal"), _json.dumps(d.get("dist_params",{}))))
     conn.commit(); aid=c.lastrowid; conn.close(); return jsonify({"id":aid,"name":name}),201
 
 @bp.route("/api/custom_activities/<int:aid>", methods=["DELETE"])
@@ -1173,7 +1191,13 @@ def simulate_contribution():
     dn=act["distribution"] or "normal"
     try: dp=_json.loads(act["dist_params"] or "{}")
     except: dp={}
-    if not dp: dp={"mean":act["hr_base"],"std":act["hr_noise"]}
+    # hr_base None ise (biyometrik tanımsız) → süreye dayalı varsayılan dağılım kullan
+    if not dp:
+        if act["hr_base"]:
+            dp={"mean": act["hr_base"], "std": act["hr_noise"] or 8}
+        else:
+            dp={"mean": (act["duration_min"]+act["duration_max"])/2,
+                "std": max(1,(act["duration_max"]-act["duration_min"])/4)}
     now=datetime.now(); recs=[]; cur=sd
     while cur<=ed:
         wday=cur.weekday(); iw=1 if wday>=5 else 0
@@ -1183,13 +1207,33 @@ def simulate_contribution():
             bh=act["hour_start"]+i*iv
             sdt=cur.replace(hour=min(bh,23),minute=0,second=0)+timedelta(minutes=random.randint(-15,15))
             dur=random.randint(act["duration_min"],act["duration_max"])
-            hr=int(sample_distribution(dn,dp,40,200))
-            spo2=round(sample_distribution("normal",{"mean":act["spo2_base"],"std":0.5},88,100),1)
-            stress=int(sample_distribution("normal",{"mean":act["stress_base"],"std":10},5,99))
+
+            # ── Biyometrik üretimi: sadece kullanıcı değer tanımladıysa ──────
+            # hr_base = None/0 → makine/süreç profili → nabız üretme
+            hr_base_val     = act["hr_base"]    or 0
+            spo2_base_val   = act["spo2_base"]  or 0
+            stress_base_val = act["stress_base"] or 0
+
+            if hr_base_val > 0:
+                hr = int(sample_distribution(dn, dp, 40, 200))
+            else:
+                hr = None  # biyometrik yok
+
+            if spo2_base_val > 0:
+                spo2 = round(sample_distribution("normal",{"mean":spo2_base_val,"std":0.5},88,100),1)
+            else:
+                spo2 = None
+
+            if stress_base_val > 0:
+                stress = int(sample_distribution("normal",{"mean":stress_base_val,"std":10},5,99))
+            else:
+                stress = None
+
+            has_bio = hr is not None
             meta=_json.dumps({"profile_name":profile["name"],"profile_type":profile["profile_type"],
                 "environment":profile["environment"],"activity":act["name"],
                 "distribution":dn,"dist_params":dp,"duration_mins":dur,
-                "day_of_week":wday,"is_weekend":iw},ensure_ascii=False)
+                "day_of_week":wday,"is_weekend":iw,"has_biometrics":has_bio},ensure_ascii=False)
             conn.execute("""INSERT INTO contribution_log
                 (profile_id,custom_activity_id,profile_name,profile_type,
                  activity_name,environment_name,environment_type,
@@ -1200,8 +1244,12 @@ def simulate_contribution():
                  profile["environment"],profile["profile_type"],
                  sdt.isoformat(),(sdt+timedelta(minutes=dur)).isoformat(),dur,
                  hr,spo2,stress,bh,wday,iw,dn,meta,now.isoformat()))
-            recs.append({"date":sdt.strftime("%d/%m"),"start":sdt.strftime("%H:%M"),
-                "duration_mins":dur,"heart_rate":hr,"spo2":spo2,"stress_level":stress})
+            rec={"date":sdt.strftime("%d/%m"),"start":sdt.strftime("%H:%M"),"duration_mins":dur}
+            if has_bio:
+                rec["heart_rate"]=hr; rec["spo2"]=spo2; rec["stress_level"]=stress
+            else:
+                rec["heart_rate"]="—"; rec["spo2"]="—"; rec["stress_level"]="—"
+            recs.append(rec)
         cur+=timedelta(days=1)
     conn.commit(); conn.close()
     return jsonify({"ok":True,"records_added":len(recs),"preview":recs[:5]})
