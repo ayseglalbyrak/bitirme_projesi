@@ -110,6 +110,51 @@ LOCATIONS = {
     "dışarı": {"lat_base": 41.025, "lng_base": 28.975},
 }
 
+# Şehir bazlı koordinat merkezleri
+CITY_COORDS = {
+    "istanbul":   {"lat": 41.015, "lng": 28.979},
+    "ankara":     {"lat": 39.925, "lng": 32.866},
+    "izmir":      {"lat": 38.423, "lng": 27.143},
+    "bursa":      {"lat": 40.183, "lng": 29.067},
+    "antalya":    {"lat": 36.897, "lng": 30.713},
+    "adana":      {"lat": 37.001, "lng": 35.321},
+    "konya":      {"lat": 37.874, "lng": 32.493},
+    "gaziantep":  {"lat": 37.066, "lng": 37.383},
+    "mersin":     {"lat": 36.812, "lng": 34.641},
+    "kayseri":    {"lat": 38.732, "lng": 35.487},
+    "eskişehir":  {"lat": 39.776, "lng": 30.521},
+    "diyarbakir": {"lat": 37.925, "lng": 40.208},
+    "diyarbakır": {"lat": 37.925, "lng": 40.208},
+    "samsun":     {"lat": 41.286, "lng": 36.330},
+    "denizli":    {"lat": 37.774, "lng": 29.086},
+    "trabzon":    {"lat": 41.003, "lng": 39.716},
+    "bolu":       {"lat": 40.576, "lng": 31.588},
+    "sakarya":    {"lat": 40.692, "lng": 30.434},
+    "kocaeli":    {"lat": 40.765, "lng": 29.940},
+    "tekirdag":   {"lat": 40.978, "lng": 27.515},
+    "tekirdağ":   {"lat": 40.978, "lng": 27.515},
+    "manisa":     {"lat": 38.614, "lng": 27.426},
+    "balikesir":  {"lat": 39.649, "lng": 27.889},
+    "balıkesir":  {"lat": 39.649, "lng": 27.889},
+    "malatya":    {"lat": 38.355, "lng": 38.309},
+    "erzurum":    {"lat": 39.905, "lng": 41.267},
+}
+
+def get_city_base(city: str, location_type: str) -> dict:
+    """Kişinin şehrine göre konum merkezini döndürür."""
+    key = city.strip().lower() if city else ""
+    # Türkçe karakter normalize
+    key = key.replace("ı","i").replace("ğ","g").replace("ü","u").replace("ş","s").replace("ö","o").replace("ç","c")
+    city_center = CITY_COORDS.get(key) or CITY_COORDS.get(city.strip().lower(), CITY_COORDS["istanbul"])
+    offsets = {
+        "ev":     {"dlat":  0.000, "dlng":  0.000},
+        "ofis":   {"dlat":  0.012, "dlng":  0.018},
+        "dışarı": {"dlat":  0.006, "dlng": -0.005},
+    }
+    off = offsets.get(location_type, {"dlat": 0, "dlng": 0})
+    return {"lat_base": city_center["lat"] + off["dlat"],
+            "lng_base": city_center["lng"] + off["dlng"]}
+
 WEATHER_CONDITIONS = [
     {"condition": "Güneşli",         "condition_en": "Sunny",        "icon": "☀️",  "temp_range": (20, 32)},
     {"condition": "Parçalı bulutlu", "condition_en": "Partly cloudy","icon": "⛅",  "temp_range": (18, 27)},
@@ -829,13 +874,14 @@ def simulation_loop(socketio):
                 alert_tick = 0
                 check_smart_alerts(conn, socketio)
 
-            for row in c.execute("SELECT id FROM persons WHERE active=1").fetchall():
-                pid = row["id"]
-                st  = c.execute("SELECT * FROM current_state WHERE person_id=?", (pid,)).fetchone()
+            for row in c.execute("SELECT id, city FROM persons WHERE active=1").fetchall():
+                pid  = row["id"]
+                city = row["city"] or ""
+                st   = c.execute("SELECT * FROM current_state WHERE person_id=?", (pid,)).fetchone()
 
                 if st is None:
                     act = pick_activity_for_hour(hour)
-                    loc = LOCATIONS.get(act["location"], LOCATIONS["ev"])
+                    loc = get_city_base(city, act["location"])
                     lat, lng = jitter_location(loc["lat_base"], loc["lng_base"], act["type"])
                     hr  = int(noisy(act["hr_base"], act["hr_noise"], 40, 200))
                     dur = random.randint(act["dur_min"], act["dur_max"])
@@ -912,7 +958,7 @@ def simulation_loop(socketio):
                                 _sim_sample("stress", stress_base, 8, 5, 99), 0.2))
                 new_hrv     = compute_hrv(new_hr, new_stress)
 
-                loc = LOCATIONS.get(act["location"], LOCATIONS["ev"])
+                loc = get_city_base(city, act["location"])
                 new_lat, new_lng = jitter_location(loc["lat_base"], loc["lng_base"], act["type"])
                 if s["location_name"] == act["location"]:
                     new_lat = smooth(s["latitude"],  new_lat, 0.05 if act["type"] == "active" else 0.01)

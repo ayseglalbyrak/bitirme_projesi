@@ -1331,31 +1331,39 @@ function updateLiveChart(){
 let leafletMap = null;
 const mapMarkers = {};
 function initMap(){
-  leafletMap = L.map("leaflet-map").setView([41.020, 28.980], 13);
+  leafletMap = L.map("leaflet-map").setView([39.0, 35.0], 6);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
     attribution:"© OpenStreetMap contributors", maxZoom:18}).addTo(leafletMap);
 }
 function updateMap(locations){
   if(!leafletMap) return;
-  locations.forEach(loc=>{
+  const validLocs = locations.filter(loc => loc.latitude && loc.longitude);
+  if(!validLocs.length) return;
+  validLocs.forEach(loc=>{
     const lat = loc.latitude, lng = loc.longitude;
-    if(!lat||!lng) return;
     const color = loc.avatar_color||"#534AB7";
+    const city  = loc.city ? ` (${loc.city})` : "";
     const icon  = L.divIcon({
-      html:`<div style="background:${color};width:28px;height:28px;border-radius:50%;
-        border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);
+      html:`<div style="background:${color};width:32px;height:32px;border-radius:50%;
+        border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.35);
         display:flex;align-items:center;justify-content:center;
-        font-size:12px;cursor:pointer;" title="${loc.name}">
+        font-size:14px;cursor:pointer;" title="${loc.name}${city}">
         ${loc.activity_icon||"📍"}</div>`,
-      className:"",iconSize:[28,28],iconAnchor:[14,14]});
+      className:"",iconSize:[32,32],iconAnchor:[16,16]});
     if(mapMarkers[loc.id]){
       mapMarkers[loc.id].setLatLng([lat,lng]);
       mapMarkers[loc.id].setIcon(icon);
+      mapMarkers[loc.id].setPopupContent(`<strong>${loc.name}</strong>${city}<br>${loc.activity_icon||""} ${loc.activity_name||""}`);
     } else {
       mapMarkers[loc.id] = L.marker([lat,lng],{icon}).addTo(leafletMap)
-        .bindPopup(`<strong>${loc.name}</strong><br>${loc.activity_icon} ${loc.activity_name}`);
+        .bindPopup(`<strong>${loc.name}</strong>${city}<br>${loc.activity_icon||""} ${loc.activity_name||""}`);
     }
   });
+  // Tüm marker'ları kapsayacak şekilde haritayı otomatik fit et (sadece ilk yüklemede)
+  if(Object.keys(mapMarkers).length === validLocs.length){
+    const bounds = L.latLngBounds(validLocs.map(l=>[l.latitude,l.longitude]));
+    leafletMap.fitBounds(bounds, {padding:[40,40], maxZoom:12});
+  }
 }
 
 // ── KARŞILAŞTIRMA ────────────────────────────────────────────────────────────

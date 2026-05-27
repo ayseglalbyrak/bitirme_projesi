@@ -208,12 +208,28 @@ def get_weekly(pid):
 
 @bp.route("/api/location", methods=["GET"])
 def get_locations():
+    from simulator import CITY_COORDS, get_city_base
     conn = get_db()
-    rows = conn.execute("""SELECT p.id,p.name,p.avatar_color,cs.latitude,cs.longitude,
-        cs.location_name,cs.activity_name,cs.activity_icon,cs.activity_type
-        FROM persons p JOIN current_state cs ON p.id=cs.person_id WHERE p.active=1""").fetchall()
+    # LEFT JOIN: current_state henuz olusmayanlar icin sehir merkezi fallback
+    rows = conn.execute("""SELECT p.id, p.name, p.city, p.avatar_color,
+        COALESCE(cs.latitude,  0) as latitude,
+        COALESCE(cs.longitude, 0) as longitude,
+        cs.location_name, cs.activity_name, cs.activity_icon, cs.activity_type
+        FROM persons p LEFT JOIN current_state cs ON p.id=cs.person_id WHERE p.active=1""").fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        if not d["latitude"] and not d["longitude"]:
+            city_key = (d["city"] or "").strip().lower()
+            norm = city_key.replace("ı","i").replace("ğ","g").replace("ü","u").replace("ş","s").replace("ö","o").replace("ç","c")
+            cc = CITY_COORDS.get(norm) or CITY_COORDS.get(city_key, CITY_COORDS["istanbul"])
+            d["latitude"]  = cc["lat"]
+            d["longitude"] = cc["lng"]
+            d["activity_name"] = d["activity_name"] or "Bekleniyor"
+            d["activity_icon"] = d["activity_icon"] or "📍"
+        result.append(d)
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify(result)
 
 
 @bp.route("/api/trend/<int:pid>", methods=["GET"])
